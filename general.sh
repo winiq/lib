@@ -32,13 +32,13 @@
 cleaning()
 {
 	case $1 in
-		"make")	# clean u-boot and kernel sources
-		[ -d "$SOURCES/$BOOTSOURCEDIR" ] && display_alert "Cleaning" "$SOURCES/$BOOTSOURCEDIR" "info" && cd $SOURCES/$BOOTSOURCEDIR && make -s ARCH=$ARCHITECTURE CROSS_COMPILE=$UBOOT_COMPILER clean >/dev/null
-		[ -d "$SOURCES/$LINUXSOURCEDIR" ] && display_alert "Cleaning" "$SOURCES/$LINUXSOURCEDIR" "info" && cd $SOURCES/$LINUXSOURCEDIR && make -s ARCH=$ARCHITECTURE CROSS_COMPILE=$KERNEL_COMPILER clean >/dev/null
+		make)	# clean u-boot and kernel sources
+		[[ -d $SOURCES/$BOOTSOURCEDIR ]] && display_alert "Cleaning" "$BOOTSOURCEDIR" "info" && cd $SOURCES/$BOOTSOURCEDIR && eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} 'make clean CROSS_COMPILE="$CCACHE $UBOOT_COMPILER" >/dev/null 2>/dev/null'
+		[[ -d $SOURCES/$LINUXSOURCEDIR ]] && display_alert "Cleaning" "$LINUXSOURCEDIR" "info" && cd $SOURCES/$LINUXSOURCEDIR && eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} 'make clean CROSS_COMPILE="$CCACHE $UBOOT_COMPILER" >/dev/null 2>/dev/null'
 		;;
 
-		"debs") # delete output/debs for current branch and family
-		if [ -d "$DEST/debs" ]; then
+		debs) # delete output/debs for current branch and family
+		if [[ -d $DEST/debs ]]; then
 			display_alert "Cleaning $DEST/debs for" "$BOARD $BRANCH" "info"
 			# easier than dealing with variable expansion and escaping dashes in file names
 			find $DEST/debs -name '*.deb' | grep -E "${CHOSEN_KERNEL/image/.*}|$CHOSEN_UBOOT" | xargs rm -f
@@ -46,20 +46,20 @@ cleaning()
 		fi
 		;;
 
-		"alldebs") # delete output/debs
-		[ -d "$DEST/debs" ] && display_alert "Cleaning" "$DEST/debs" "info" && rm -rf $DEST/debs/*
+		alldebs) # delete output/debs
+		[[ -d $DEST/debs ]] && display_alert "Cleaning" "$DEST/debs" "info" && rm -rf $DEST/debs/*
 		;;
 
-		"cache") # delete output/cache
-		[ -d "$CACHEDIR" ] && display_alert "Cleaning" "$CACHEDIR" "info" && find $CACHEDIR/ -type f -delete
+		cache) # delete output/cache
+		[[ -d $CACHEDIR ]] && display_alert "Cleaning" "$CACHEDIR" "info" && find $CACHEDIR/ -type f -delete
 		;;
 
-		"images") # delete output/images
-		[ -d "$DEST/images" ] && display_alert "Cleaning" "$DEST/images" "info" && rm -rf $DEST/images/*
+		images) # delete output/images
+		[[ -d $DEST/images ]] && display_alert "Cleaning" "$DEST/images" "info" && rm -rf $DEST/images/*
 		;;
 
-		"sources") # delete output/sources
-		[ -d "$SOURCES" ] && display_alert "Cleaning" "$SOURCES" "info" && rm -rf $SOURCES/*
+		sources) # delete output/sources
+		[[ -d $SOURCES ]] && display_alert "Cleaning" "$SOURCES" "info" && rm -rf $SOURCES/*
 		;;
 
 		*) # unknown
@@ -109,13 +109,46 @@ get_package_list_hash()
 
 fetch_from_github (){
 GITHUBSUBDIR=$3
+local githuburl=$1
 [[ -z "$3" ]] && GITHUBSUBDIR="branchless"
 [[ -z "$4" ]] && GITHUBSUBDIR="" # only kernel and u-boot have subdirs for tags
 if [ -d "$SOURCES/$2/$GITHUBSUBDIR" ]; then
 	cd $SOURCES/$2/$GITHUBSUBDIR
-	git checkout -q $FORCE $3
-	display_alert "... updating" "$2" "info"
-	PULL=$(git pull)
+	git checkout -q $FORCE $3 2> /dev/null	
+	local bar_1=$(git ls-remote $githuburl --tags $GITHUBSUBDIR* | sed -n '1p' | cut -f1 | cut -c1-7)
+	local bar_2=$(git ls-remote $githuburl --tags $GITHUBSUBDIR* | sed -n '2p' | cut -f1 | cut -c1-7)
+	local bar_3=$(git ls-remote $githuburl --tags HEAD * | sed -n '1p' | cut -f1 | cut -c1-7)
+	local localbar="$(git rev-parse HEAD | cut -c1-7)"
+	
+	# debug
+	# echo "git ls-remote $githuburl --tags $GITHUBSUBDIR* | sed -n '1p' | cut -f1"
+	# echo "git ls-remote $githuburl --tags $GITHUBSUBDIR* | sed -n '2p' | cut -f1"	
+	# echo "git ls-remote $githuburl --tags HEAD * | sed -n '1p' | cut -f1"		
+	# echo "$3 - $bar_1 || $bar_2 = $localbar"
+	# echo "$3 - $bar_3 = $localbar"
+	
+	# ===>> workaround >> [[ $bar_1 == "" && $bar_2 == "" ]]
+	
+	if [[ "$3" != "" ]] && [[ "$bar_1" == "$localbar" || "$bar_2" == "$localbar" ]] || [[ "$3" == "" && "$bar_3" == "$localbar" ]] || [[ $bar_1 == "" && $bar_2 == "" ]]; then
+		display_alert "... you have latest sources" "$2 $3" "info"
+	else		
+		display_alert "... your sources are outdated - creating new shallow clone" "$2 $3" "info"
+		if [[ -z "$GITHUBSUBDIR" ]]; then 
+			rm -rf $SOURCES/$2".old"
+			mv $SOURCES/$2 $SOURCES/$2".old" 
+		else
+			rm -rf $SOURCES/$2/$GITHUBSUBDIR".old"
+			mv $SOURCES/$2/$GITHUBSUBDIR $SOURCES/$2/$GITHUBSUBDIR".old" 
+		fi
+		
+		if [[ -n $3 && -n "$(git ls-remote $1 | grep "$tag")" ]]; then
+			git clone -n $1 $SOURCES/$2/$GITHUBSUBDIR -b $3 --depth 1 || git clone -n $1 $SOURCES/$2/$GITHUBSUBDIR -b $3
+		else
+			git clone -n $1 $SOURCES/$2/$GITHUBSUBDIR --depth 1
+		fi
+		cd $SOURCES/$2/$GITHUBSUBDIR
+		git checkout -q
+	fi
 else
 	if [[ -n $3 && -n "$(git ls-remote $1 | grep "$tag")" ]]; then
 		display_alert "... creating a shallow clone" "$2 $3" "info"
@@ -146,16 +179,25 @@ display_alert()
 # log function parameters to install.log
 echo "Displaying message: $@" >> $DEST/debug/install.log
 
-if [[ $2 != "" ]]; then TMPARA="[\e[0;33m $2 \x1B[0m]"; else unset TMPARA; fi
-if [ $3 == "err" ]; then
-	echo -e "[\e[0;31m error \x1B[0m] $1 $TMPARA"
-elif [ $3 == "wrn" ]; then
-	echo -e "[\e[0;35m warn \x1B[0m] $1 $TMPARA"
-elif [ $3 == "ext" ]; then
-	echo -e "[\e[0;32m o.k. \x1B[0m] \e[1;32m$1\x1B[0m $TMPARA"
-else
-	echo -e "[\e[0;32m o.k. \x1B[0m] $1 $TMPARA"
-fi
+[[ -n $2 ]] && local tmp="[\e[0;33m $2 \x1B[0m]"
+
+case $3 in
+	err)
+	echo -e "[\e[0;31m error \x1B[0m] $1 $tmp"
+	;;
+
+	wrn)
+	echo -e "[\e[0;35m warn \x1B[0m] $1 $tmp"
+	;;
+
+	ext)
+	echo -e "[\e[0;32m o.k. \x1B[0m] \e[1;32m$1\x1B[0m $tmp"
+	;;
+
+	*) # info or empty
+	echo -e "[\e[0;32m o.k. \x1B[0m] $1 $tmp"
+	;;
+esac
 }
 
 #---------------------------------------------------------------------------------------------------------------------------------
@@ -208,7 +250,7 @@ addtorepo ()
 # add all deb files to repository
 # parameter "remove" dumps all and creates new
 # function: cycle trough distributions
-DISTROS=("wheezy" "jessie" "trusty")
+DISTROS=("wheezy" "jessie" "trusty" "xenial")
 IFS=" "
 j=0
 while [[ $j -lt ${#DISTROS[@]} ]]
@@ -261,7 +303,7 @@ prepare_host() {
 
 	display_alert "Preparing" "host" "info"
 
-	if [[ $(dpkg --print-architecture) == armhf ]]; then
+	if [[ $(dpkg --print-architecture) == arm* ]]; then
 		display_alert "Please read documentation to set up proper compilation environment" "..." "info"
 		display_alert "http://www.armbian.com/using-armbian-tools/" "..." "info"
 		exit_with_error "Running this tool on board itself is not supported"
@@ -286,39 +328,42 @@ prepare_host() {
 	fi
 
 	# packages list for host
-	PAK="ca-certificates device-tree-compiler pv bc lzop zip binfmt-support build-essential ccache debootstrap ntpdate pigz \
+	local hostdeps="ca-certificates device-tree-compiler pv bc lzop zip binfmt-support build-essential ccache debootstrap ntpdate pigz \
 	gawk gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabi qemu-user-static u-boot-tools uuid-dev zlib1g-dev unzip libusb-1.0-0-dev ntpdate \
 	parted pkg-config libncurses5-dev whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev \
-	nfs-kernel-server btrfs-tools gcc-aarch64-linux-gnu ncurses-term p7zip-full dos2unix"
+	nfs-kernel-server btrfs-tools gcc-aarch64-linux-gnu ncurses-term p7zip-full dos2unix dosfstools libc6-dev-armhf-cross libc6-dev-armel-cross\
+	libc6-dev-arm64-cross"
 
 	# warning: apt-cacher-ng will fail if installed and used both on host and in container/chroot environment with shared network
 	# set NO_APT_CACHER=yes to prevent installation errors in such case
-	if [[ $NO_APT_CACHER != yes ]]; then PAK="$PAK apt-cacher-ng"; fi
+	if [[ $NO_APT_CACHER != yes ]]; then hostdeps="$hostdeps apt-cacher-ng"; fi
 
 	local codename=$(lsb_release -sc)
-	if [[ $codename == "" || "trusty wily xenial" != *"$codename"* ]]; then
+	if [[ -z $codename || "trusty wily xenial" != *"$codename"* ]]; then
 		display_alert "Host system support was not tested" "${codename:-(unknown)}" "wrn"
 		echo -e "Press \e[0;33m<Ctrl-C>\x1B[0m to abort compilation, \e[0;33m<Enter>\x1B[0m to ignore and continue"
 		read
 	fi
 
-	if [[ $codename == trusty ]]; then
-		PAK="$PAK libc6-dev-armhf-cross libc6-dev-armel-cross";
-		if [[ ! -f /etc/apt/sources.list.d/aptly.list ]]; then
-			display_alert "Adding repository for trusty" "aptly" "info"
-			echo 'deb http://repo.aptly.info/ squeeze main' > /etc/apt/sources.list.d/aptly.list
-			apt-key adv --keyserver keys.gnupg.net --recv-keys 9E3E53F19C7DE460
-		fi
+	if [[ $codename == trusty && ! -f /etc/apt/sources.list.d/aptly.list ]]; then
+		display_alert "Adding repository for trusty" "aptly" "info"
+		echo 'deb http://repo.aptly.info/ squeeze main' > /etc/apt/sources.list.d/aptly.list
+		apt-key adv --keyserver keys.gnupg.net --recv-keys 9E3E53F19C7DE460
 	fi
 
-	if [[ $codename == wily || $codename == xenial ]]; then
-		PAK="$PAK libc6-dev-armhf-cross libc6-dev-armel-cross"
+	# Deboostrap in trusty breaks due too old debootstrap. We are installing Xenial package
+	local debootstrap_version=$(dpkg-query -W -f='${Version}\n' debootstrap | cut -f1 -d'+')
+	local debootstrap_minimal="1.0.78"
+
+	if [[ "$debootstrap_version" < "$debootstrap_minimal" ]]; then 
+		display_alert "Upgrading" "debootstrap" "info"
+		dpkg -i $SRC/lib/bin/debootstrap_1.0.78+nmu1ubuntu1.1_all.deb
 	fi
 
 	local deps=()
 	local installed=$(dpkg-query -W -f '${db:Status-Abbrev}|${binary:Package}\n' '*' 2>/dev/null | grep '^ii' | awk -F '|' '{print $2}' | cut -d ':' -f 1)
 
-	for packet in $PAK; do
+	for packet in $hostdeps; do
 		if ! grep -q -x -e "$packet" <<< "$installed"; then deps+=("$packet"); fi
 	done
 
@@ -347,7 +392,13 @@ prepare_host() {
 
 	[[ ! -f $SRC/userpatches/customize-image.sh ]] && cp $SRC/lib/scripts/customize-image.sh.template $SRC/userpatches/customize-image.sh
 
-	# TODO: needs better documentation
-	echo 'Place your patches and kernel.config / u-boot.config / lib.config here.' > $SRC/userpatches/readme.txt
-	echo 'They will be automatically included if placed here!' >> $SRC/userpatches/readme.txt
+	if [[ ! -f $SRC/userpatches/README ]]; then
+		rm $SRC/userpatches/readme.txt
+		echo 'Please read documentation about customizing build configuration' > $SRC/userpatches/README
+		echo 'http://www.armbian.com/using-armbian-tools/' >> $SRC/userpatches/README
+	fi
+
+	# check free space (basic), doesn't work on Trusty
+	local freespace=$(findmnt --target $SRC -n -o AVAIL -b 2>/dev/null) # in bytes
+	[[ -n $freespace && $(( $freespace / 1073741824 )) -lt 10 ]] && display_alert "Low free space left" "$(( $freespace / 1073741824 )) GiB" "wrn"
 }

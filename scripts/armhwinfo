@@ -32,6 +32,7 @@ collect_informations() {
 	INTERUPT=$(grep "eth0" /proc/interrupts)
 	WIFI8189ES=$(lsmod | grep 8189es | grep -v "0 $" | grep -v "0$") # ignore when not loaded
 	WIFIAP6211=$(lsmod | grep ap6211)
+	SPDIF=$(lsmod | grep spdif)
 	read VERSION </proc/version
 } # collect_informations
 
@@ -64,7 +65,11 @@ detect_board() {
 			ID="Clearfog"
 		fi
 		if [ $HARDWARE = "gs705a" ]; then
-			ID="Guitar"
+			if [ $MEMTOTAL -gt 1800 ]; then
+				ID="Roseapple Pi"
+			else
+				ID="Guitar"
+			fi
 		fi
 	    if [ $HARDWARE = "sun4i" ] || [ $HARDWARE = "Allwinner" ]; then
 			ID="Cubieboard"
@@ -124,10 +129,10 @@ detect_board() {
 			ID="Orange H3"
 			# 10 or 120 sec user feedback that the board is ready after 1st login with 3.4 kernel
 			SwapState="$(grep swap /etc/fstab)"
-			if [ -f "X${SwapState}" != "X" ]; then
-				echo heartbeat >/sys/class/leds/*green*/trigger
+			if [ "X${SwapState}" != "X" ]; then
+				(echo heartbeat >/sys/class/leds/*green*/trigger) 2>/dev/null
 				[ -f "/root/.not_logged_in_yet" ] && BlinkTime=120 || BlinkTime=10
-				(sleep ${BlinkTime} && echo default-on >/sys/class/leds/*green*/trigger) &
+				(sleep ${BlinkTime} && (echo default-on >/sys/class/leds/*green*/trigger) 2>/dev/null) &
 			fi
 	
 			# redistribute USB irqs to dedicated cores
@@ -153,6 +158,8 @@ detect_board() {
 					fi
 					;;
 				esac
+			elif [ "$SPDIF" != "" ]; then
+				ID="Beelink X2"
 			elif [ "$WIFI8189ES" != "" ]; then
 				ID="Orange Pi Lite"
 				echo 8 >/proc/irq/$(awk -F":" "/${WiFi}/ {print \$1}" </proc/interrupts | sed 's/\ //g')/smp_affinity
@@ -320,7 +327,7 @@ case $1 in
 		collect_informations
 		if [ $HARDWARE = "sun8i" ]; then
 			# redefine green led to blink until shutdown
-			echo heartbeat >/sys/class/leds/*green*/trigger
+			(echo heartbeat >/sys/class/leds/*green*/trigger) 2>/dev/null 
 		fi
 		;;
 esac

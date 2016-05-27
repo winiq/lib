@@ -29,15 +29,12 @@ compile_uboot (){
 		exit_with_error "Error building u-boot: source directory does not exist" "$BOOTSOURCEDIR"
 	fi
 
-	display_alert "Compiling uboot. Please wait." "$VER" "info"
-	eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} ${UBOOT_COMPILER}gcc --version | head -1 | tee -a $DEST/debug/install.log
-	echo
-	cd $SOURCES/$BOOTSOURCEDIR
+	# read uboot version to variable $VER
+	grab_version "$SOURCES/$BOOTSOURCEDIR" "VER"
 
-	local cthreads=$CTHREADS
-	[[ $LINUXFAMILY == marvell ]] && local MAKEPARA="u-boot.mmc"
-	[[ $LINUXFAMILY == s500 ]] && local MAKEPARA="u-boot-dtb.img"
-	[[ $BOARD == odroidc2 ]] && local MAKEPARA="ARCH=arm" && local cthreads=""
+	display_alert "Compiling uboot" "$VER" "info"
+	display_alert "Compiler version" "${UBOOT_COMPILER}gcc $(eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} ${UBOOT_COMPILER}gcc -dumpversion)" "info"
+	cd $SOURCES/$BOOTSOURCEDIR
 
 	eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} 'make $CTHREADS $BOOTCONFIG CROSS_COMPILE="$CCACHE $UBOOT_COMPILER"' 2>&1 \
 		${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
@@ -55,7 +52,7 @@ compile_uboot (){
 		fi
 	fi
 
-	eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} 'make $MAKEPARA $cthreads CROSS_COMPILE="$CCACHE $UBOOT_COMPILER"' 2>&1 \
+	eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} 'make $UBOOT_TARGET $CTHREADS CROSS_COMPILE="$CCACHE $UBOOT_COMPILER"' 2>&1 \
 		${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
 		${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Compiling u-boot..." $TTY_Y $TTY_X'} \
 		${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
@@ -112,18 +109,17 @@ compile_sunxi_tools (){
 	display_alert "Compiling sunxi tools" "@host & target" "info"
 	cd $SOURCES/$MISC1_DIR
 	make -s clean >/dev/null 2>&1
-	rm -f sunxi-fexc sunxi-nand-part
 	make -s >/dev/null 2>&1
-	cp fex2bin bin2fex /usr/local/bin/
+	mkdir -p /usr/local/bin/
+	cp fex2bin bin2fex sunxi-fel /usr/local/bin/
 	# make -s clean >/dev/null 2>&1
-	# rm -f sunxi-fexc sunxi-nand-part meminfo sunxi-fel sunxi-pio 2>/dev/null
+
 	# NOTE: Fix CC=$CROSS_COMPILE"gcc" before reenabling
 	# make $CTHREADS 'sunxi-nand-part' CC=$CROSS_COMPILE"gcc" >> $DEST/debug/install.log 2>&1
 	# make $CTHREADS 'sunxi-fexc' CC=$CROSS_COMPILE"gcc" >> $DEST/debug/install.log 2>&1
 	# make $CTHREADS 'meminfo' CC=$CROSS_COMPILE"gcc" >> $DEST/debug/install.log 2>&1
 
 }
-
 
 compile_kernel (){
 #---------------------------------------------------------------------------------------------------------------------------------
@@ -137,13 +133,9 @@ compile_kernel (){
 	# read kernel version to variable $VER
 	grab_version "$SOURCES/$LINUXSOURCEDIR" "VER"
 
-	display_alert "Compiling $BRANCH kernel" "@host" "info"
-	eval ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} ${KERNEL_COMPILER}gcc --version | head -1 | tee -a $DEST/debug/install.log
-	echo
+	display_alert "Compiling $BRANCH kernel" "$VER" "info"
+	display_alert "Compiler version" "${KERNEL_COMPILER}gcc $(eval ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} ${KERNEL_COMPILER}gcc -dumpversion)" "info"
 	cd $SOURCES/$LINUXSOURCEDIR/
-
-	# adding custom firmware to kernel source
-	if [[ -n $FIRMWARE ]]; then unzip -o $SRC/lib/$FIRMWARE -d $SOURCES/$LINUXSOURCEDIR/firmware; fi
 
 	# use proven config
 	if [[ $KERNEL_KEEP_CONFIG != yes || ! -f $SOURCES/$LINUXSOURCEDIR/.config ]]; then
@@ -161,7 +153,7 @@ compile_kernel (){
 
 	export LOCALVERSION="-$LINUXFAMILY"
 
-	sed -i 's/EXTRAVERSION = .*/EXTRAVERSION = /' Makefile
+	sed -i 's/EXTRAVERSION = .*/EXTRAVERSION =/' Makefile
 
 	# We can use multi threading here but not later since it's not working. This way of compilation is much faster.
 	if [[ $KERNEL_CONFIGURE != yes ]]; then
@@ -184,7 +176,7 @@ compile_kernel (){
 		exit_with_error "Kernel was not built" "@host"
 	fi
 
-	# different packaging for 4.3+ // probably temporaly soution
+	# different packaging for 4.3+
 	KERNEL_PACKING="deb-pkg"
 	IFS='.' read -a array <<< "$VER"
 	if (( "${array[0]}" == "4" )) && (( "${array[1]}" >= "3" )); then
@@ -245,6 +237,7 @@ find_toolchain()
 			toolchain=${dir}bin
 		fi
 	done
+	[[ -z $toolchain ]] && exit_with_error "Could not find required toolchain" "${compiler}gcc $expression"
 	eval $"$var_name"="$toolchain"
 }
 

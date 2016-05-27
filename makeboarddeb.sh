@@ -73,6 +73,8 @@ create_board_package (){
 	echo "[[ -f /root/nand-sata-install ]] && rm /root/nand-sata-install" >> $destination/DEBIAN/postinst
 	echo "ln -sf /var/run/motd /etc/motd" >> $destination/DEBIAN/postinst
 	echo "[[ -f /etc/bash.bashrc.custom ]] && rm /etc/bash.bashrc.custom" >> $destination/DEBIAN/postinst
+	echo "[[ -f /etc/update-motd.d/00-header ]] && rm /etc/update-motd.d/00-header" >> $destination/DEBIAN/postinst
+	echo "[[ -f /etc/update-motd.d/10-help-text ]] && rm /etc/update-motd.d/10-help-text" >> $destination/DEBIAN/postinst
 	echo "if [[ -d /boot/bin && ! -f /boot/script.bin ]]; then ln -sf bin/$BOARD.bin /boot/script.bin >/dev/null 2>&1 || cp /boot/bin/$BOARD.bin /boot/script.bin; fi">> $destination/DEBIAN/postinst
 	echo "exit 0" >> $destination/DEBIAN/postinst
 
@@ -89,6 +91,15 @@ create_board_package (){
 	# module evbug is loaded automagically at boot time but we don't want that
 	mkdir -p $destination/etc/modprobe.d/
 	echo "blacklist evbug" > $destination/etc/modprobe.d/ev-debug-blacklist.conf
+
+	# updating uInitrd image in update-initramfs trigger
+	mkdir -p $destination/etc/initramfs/post-update.d/
+	cat <<-EOF > $destination/etc/initramfs/post-update.d/99-uboot
+	#!/bin/sh
+	mkimage -A $ARCHITECTURE -O linux -T ramdisk -C gzip -n uInitrd -d \$2 /boot/uInitrd > /dev/null
+	exit 0
+	EOF
+	chmod +x $destination/etc/initramfs/post-update.d/99-uboot
 
 	# script to install to SATA
 	mkdir -p $destination/usr/sbin/
@@ -118,7 +129,12 @@ create_board_package (){
 	if [[ $LINUXCONFIG == *sun* ]] ; then
 		if [[ $BRANCH != next ]]; then
 			# add soc temperature app
-			arm-linux-gnueabihf-gcc $SRC/lib/scripts/sunxi-temp/sunxi_tp_temp.c -o $destination/usr/local/bin/sunxi_tp_temp
+			local codename=$(lsb_release -sc)
+			if [[ -z $codename || "sid" == *"$codename"* ]]; then
+				arm-linux-gnueabihf-gcc-5 $SRC/lib/scripts/sunxi-temp/sunxi_tp_temp.c -o $destination/usr/local/bin/sunxi_tp_temp
+			else
+				arm-linux-gnueabihf-gcc $SRC/lib/scripts/sunxi-temp/sunxi_tp_temp.c -o $destination/usr/local/bin/sunxi_tp_temp
+			fi
 		fi
 
 		# lamobo R1 router switch config

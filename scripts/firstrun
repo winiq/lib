@@ -90,7 +90,6 @@ collect_informations() {
 			rootfstype=$2
 			;;
 	esac
-	set -e
 } # collect_informations
 
 display_alert() {
@@ -264,6 +263,11 @@ main() {
 
 	if [ "X${HARDWARE}" = "Xsun8i" -o "X${HARDWARE}" = "Xsun7i" ]; then
 		autodetect_sunxi
+	fi
+
+	# pine64 temp workaround
+	if [ "$(awk '/Hardware/ {print $3}' </proc/cpuinfo)" = "sun50iw1p1" ] && [ -z "$(grep ethaddr /boot/uEnv.txt)" ] && [ -f "/sys/class/net/eth0/address" ]; then
+		echo "ethaddr=$(cat /sys/class/net/eth0/address)" >> /boot/uEnv.txt
 	fi
 
 	update-rc.d -f firstrun remove >/dev/null 2>&1

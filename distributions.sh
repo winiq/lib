@@ -116,6 +116,9 @@ trusty)
 		# fix selinux error
 		mkdir $CACHEDIR/sdcard/selinux
 
+		# remove legal info from Ubuntu
+		[[ -f $CACHEDIR/sdcard/etc/legal ]] && rm $CACHEDIR/sdcard/etc/legal
+		
 		# that my custom motd works well
 		if [[ -d $CACHEDIR/sdcard/etc/update-motd.d ]]; then
 			mv $CACHEDIR/sdcard/etc/update-motd.d $CACHEDIR/sdcard/etc/update-motd.d-backup
@@ -136,20 +139,20 @@ xenial)
 		sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' $CACHEDIR/sdcard/etc/ssh/sshd_config
 
 		# auto upgrading (disabled while testing)
-		#sed -e "s/ORIGIN/Debian/g" -i $CACHEDIR/sdcard/etc/apt/apt.conf.d/50unattended-upgrades
-		#sed -e "s/CODENAME/$RELEASE/g" -i $CACHEDIR/sdcard/etc/apt/apt.conf.d/50unattended-upgrades
+		sed -e "s/ORIGIN/Ubuntu/g" -i $CACHEDIR/sdcard/etc/apt/apt.conf.d/50unattended-upgrades
+		sed -e "s/CODENAME/$RELEASE/g" -i $CACHEDIR/sdcard/etc/apt/apt.conf.d/50unattended-upgrades
 
 		# fix selinux error
 		mkdir $CACHEDIR/sdcard/selinux
-
-		# add serial console (needs testing whether it's still needed)
-		#cp $SRC/lib/config/ttyS0.conf $CACHEDIR/sdcard/etc/init/$SERIALCON.conf
-		#sed -e "s/ttyS0/$SERIALCON/g" -i $CACHEDIR/sdcard/etc/init/$SERIALCON.conf
+		
+		# remove legal info from Ubuntu
+		[[ -f $CACHEDIR/sdcard/etc/legal ]] && rm $CACHEDIR/sdcard/etc/legal
+		
 		chroot $CACHEDIR/sdcard /bin/bash -c "systemctl --no-reload enable serial-getty@$SERIALCON.service >/dev/null 2>&1"
-		#mkdir -p "$CACHEDIR/sdcard/etc/systemd/system/serial-getty@$SERIALCON.service.d"
-		#echo "[Service]" > "$CACHEDIR/sdcard/etc/systemd/system/serial-getty@$SERIALCON.service.d/10-rate.conf"
-		#echo "ExecStart=" >> "$CACHEDIR/sdcard/etc/systemd/system/serial-getty@$SERIALCON.service.d/10-rate.conf"
-		#echo "ExecStart=-/sbin/agetty -L 115200 %I $TERM" >> "$CACHEDIR/sdcard/etc/systemd/system/serial-getty@$SERIALCON.service.d/10-rate.conf"
+
+		# Fix for PuTTY/KiTTY & ncurses-based dialogs (i.e. alsamixer) over serial
+		# may break other terminals like screen
+		#printf "[Service]\nEnvironment=TERM=xterm-256color" > /etc/systemd/system/serial-getty@.service.d/10-term.conf
 
 		# don't clear screen tty1
 		mkdir -p "$CACHEDIR/sdcard/etc/systemd/system/getty@tty1.service.d/"
@@ -164,7 +167,7 @@ xenial)
 		cp $SRC/lib/config/71-axp-power-button.rules $CACHEDIR/sdcard/etc/udev/rules.d/
 
 		# disable ureadahead
-		# needs kernel tracing options that AFAIK are present only in mainline TODO: fix later
+		# needs kernel tracing options that AFAIK are present only in mainline
 		chroot $CACHEDIR/sdcard /bin/bash -c "systemctl --no-reload mask ureadahead.service >/dev/null 2>&1"
 		chroot $CACHEDIR/sdcard /bin/bash -c "systemctl --no-reload mask setserial.service etc-setserial.service >/dev/null 2>&1"
 
@@ -173,7 +176,6 @@ xenial)
 		mkdir -p $CACHEDIR/sdcard/etc/systemd/system/networking.service.d/
 		printf "[Service]\nExecStop=\n" > $CACHEDIR/sdcard/etc/systemd/system/networking.service.d/10-nostop.conf
 		;;
-
 	*)
 	exit_with_error "Unknown OS release selected"
 	;;
