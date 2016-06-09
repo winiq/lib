@@ -1,5 +1,20 @@
 # Release history
 
+**v5.14 / 5.6.2016**
+- Odroid C2 and Orange Pi+ images rebuilt 
+- fixed eMMC installer, updated images and repository for Opi PC Plus and Opi Plus 2E
+
+**v5.12 / 31.5.2016**
+
+- updated C1 images
+- added wifi driver for new Oranges (modprobe 8189fs)
+- added Orange Pi Lite, PC Plus and Plus 2E images
+
+**v5.11 / 24.5.2016**
+
+- Various bug fixes
+- new working images for Actions Semi S500 boards
+
 **v5.10 / 1.5.2016**
 
 Images:

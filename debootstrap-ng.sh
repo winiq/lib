@@ -12,6 +12,7 @@
 # create_rootfs_cache
 # prepare_partitions
 # create_image
+# install_dummy_initctl
 # mount_chroot
 # umount_chroot
 # unmount_on_exit
@@ -123,15 +124,15 @@ create_rootfs_cache()
 	if [[ -f $cache_fname ]]; then
 		local date_diff=$(( ($(date +%s) - $(stat -c %Y $cache_fname)) / 86400 ))
 		display_alert "Extracting $display_name" "$date_diff days old" "info"
-		pv -p -b -r -c -N "$display_name" "$cache_fname" | pigz -dc | tar xp -C $CACHEDIR/sdcard/
+		pv -p -b -r -c -N "$display_name" "$cache_fname" | pigz -dc | tar xp --xattrs -C $CACHEDIR/sdcard/
 	else
 		display_alert "Creating new rootfs for" "$RELEASE" "info"
 
 		# stage: debootstrap base system
 		if [[ $NO_APT_CACHER != yes ]]; then
 			# apt-cacher-ng apt-get proxy parameter
-			local apt_extra='-o Acquire::http::Proxy="http://${APT_PROXY_ADDR:-localhost:3142}"'
-			local apt_mirror="http://${APT_PROXY_ADDR:-localhost:3142/}$APT_MIRROR"
+			local apt_extra="-o Acquire::http::Proxy=\"http://${APT_PROXY_ADDR:-localhost:3142}\""
+			local apt_mirror="http://${APT_PROXY_ADDR:-localhost:3142}/$APT_MIRROR"
 		else
 			local apt_mirror="http://$APT_MIRROR"
 		fi
@@ -166,16 +167,7 @@ create_rootfs_cache()
 		# policy-rc.d script prevents starting or reloading services during image creation
 		printf '#!/bin/sh\nexit 101' > $CACHEDIR/sdcard/usr/sbin/policy-rc.d
 		chmod 755 $CACHEDIR/sdcard/usr/sbin/policy-rc.d
-		if [[ -x $CACHEDIR/sdcard/sbin/start-stop-daemon ]]; then
-			mv $CACHEDIR/sdcard/sbin/start-stop-daemon $CACHEDIR/sdcard/sbin/start-stop-daemon.REAL
-			printf '#!/bin/sh\necho "Warning: Fake start-stop-daemon called, doing nothing"' > $CACHEDIR/sdcard/sbin/start-stop-daemon
-			chmod 755 $CACHEDIR/sdcard/sbin/start-stop-daemon
-		fi
-		if [[ -x $CACHEDIR/sdcard/sbin/initctl ]]; then
-			mv $CACHEDIR/sdcard/sbin/initctl $CACHEDIR/sdcard/sbin/initctl.REAL
-			printf '#!/bin/sh\necho "Warning: Fake initctl called, doing nothing"' $CACHEDIR/sdcard/sbin/initctl
-			chmod 755 $CACHEDIR/sdcard/sbin/initctl
-		fi
+		install_dummy_initctl
 
 		# stage: configure language and locales
 		display_alert "Configuring locales" "$DEST_LANG" "info"
@@ -203,7 +195,7 @@ create_rootfs_cache()
 
 		# stage: update packages list
 		display_alert "Updating package list" "$RELEASE" "info"
-		eval 'LC_ALL=C LANG=C chroot $CACHEDIR/sdcard /bin/bash -c "apt-get -y $apt_extra update"' \
+		eval 'LC_ALL=C LANG=C chroot $CACHEDIR/sdcard /bin/bash -c "apt-get -q -y $apt_extra update"' \
 			${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/debootstrap.log'} \
 			${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Updating package lists..." $TTY_Y $TTY_X'} \
 			${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
@@ -228,17 +220,7 @@ create_rootfs_cache()
 		#[[ ${PIPESTATUS[0]} -ne 0 ]] && exit_with_error "Upgrading base packages failed"
 
 		# new initctl and start-stop-daemon may be installed after upgrading base packages
-		# TODO: Reduce code duplication
-		if [[ -x $CACHEDIR/sdcard/sbin/start-stop-daemon ]]; then
-			mv $CACHEDIR/sdcard/sbin/start-stop-daemon $CACHEDIR/sdcard/sbin/start-stop-daemon.REAL
-			printf '#!/bin/sh\necho "Warning: Fake start-stop-daemon called, doing nothing"' > $CACHEDIR/sdcard/sbin/start-stop-daemon
-			chmod 755 $CACHEDIR/sdcard/sbin/start-stop-daemon
-		fi
-		if [[ -x $CACHEDIR/sdcard/sbin/initctl ]]; then
-			mv $CACHEDIR/sdcard/sbin/initctl $CACHEDIR/sdcard/sbin/initctl.REAL
-			printf '#!/bin/sh\necho "Warning: Fake initctl called, doing nothing"' $CACHEDIR/sdcard/sbin/initctl
-			chmod 755 $CACHEDIR/sdcard/sbin/initctl
-		fi
+		install_dummy_initctl
 
 		# stage: install additional packages
 		display_alert "Installing packages for" "Armbian" "info"
@@ -264,7 +246,7 @@ create_rootfs_cache()
 		# based on rootfs size calculation
 		umount_chroot
 
-		tar cp --directory=$CACHEDIR/sdcard/ --exclude='./dev/*' --exclude='./proc/*' --exclude='./run/*' --exclude='./tmp/*' \
+		tar cp --xattrs --directory=$CACHEDIR/sdcard/ --exclude='./dev/*' --exclude='./proc/*' --exclude='./run/*' --exclude='./tmp/*' \
 			--exclude='./sys/*' . | pv -p -b -r -s $(du -sb $CACHEDIR/sdcard/ | cut -f1) -N "$display_name" | pigz > $cache_fname
 	fi
 	mount_chroot
@@ -301,7 +283,14 @@ prepare_partitions()
 	parttype[btrfs]=btrfs
 	# parttype[nfs] is empty
 
-	mkopts[ext4]='-O ^64bit,^metadata_csum,uninit_bg -q -m 2'
+	# metadata_csum is supported since e2fsprogs 1.43
+	local codename=$(lsb_release -sc)
+	if [[ $codename == sid || $codename == stretch ]]; then
+		mkopts[ext4]='-O ^64bit,^metadata_csum,uninit_bg -q -m 2'
+	else
+		mkopts[ext4]='-q -m 2'
+	fi
+
 	mkopts[fat]='-n BOOT'
 	# mkopts[f2fs] is empty
 	# mkopts[btrfs] is empty
@@ -440,11 +429,11 @@ create_image()
 
 	if [[ $ROOTFS_TYPE != nfs ]]; then
 		display_alert "Copying files to image" "tmprootfs.raw" "info"
-		rsync -aHWh --exclude="/boot/*" --exclude="/dev/*" --exclude="/proc/*" --exclude="/run/*" --exclude="/tmp/*" \
+		rsync -aHWXh --exclude="/boot/*" --exclude="/dev/*" --exclude="/proc/*" --exclude="/run/*" --exclude="/tmp/*" \
 			--exclude="/sys/*" --info=progress2,stats1 $CACHEDIR/sdcard/ $CACHEDIR/mount/
 	else
 		display_alert "Creating rootfs archive" "rootfs.tgz" "info"
-		tar cp --directory=$CACHEDIR/sdcard/ --exclude='./boot/*' --exclude='./dev/*' --exclude='./proc/*' --exclude='./run/*' --exclude='./tmp/*' \
+		tar cp --xattrs --directory=$CACHEDIR/sdcard/ --exclude='./boot/*' --exclude='./dev/*' --exclude='./proc/*' --exclude='./run/*' --exclude='./tmp/*' \
 			--exclude='./sys/*' . | pv -p -b -r -s $(du -sb $CACHEDIR/sdcard/ | cut -f1) -N "rootfs.tgz" | pigz > $DEST/images/$VERSION-rootfs.tgz
 	fi
 
@@ -455,7 +444,7 @@ create_image()
 		rsync -rLtWh --info=progress2,stats1 $CACHEDIR/sdcard/boot $CACHEDIR/mount
 	else
 		# ext4
-		rsync -aHWh --info=progress2,stats1 $CACHEDIR/sdcard/boot $CACHEDIR/mount
+		rsync -aHWXh --info=progress2,stats1 $CACHEDIR/sdcard/boot $CACHEDIR/mount
 	fi
 
 	# DEBUG: print free space
@@ -499,6 +488,24 @@ create_image()
 		rm -f $VERSION.raw *.asc armbian.txt
 		FILESIZE=$(ls -l --b=M $FILENAME | cut -d " " -f5)
 		display_alert "Done building" "$FILENAME [$FILESIZE]" "info"
+	fi
+} #############################################################################
+
+# install_dummy_initctl
+#
+# helper to reduce code duplication
+#
+install_dummy_initctl()
+{
+	if [[ -x $CACHEDIR/sdcard/sbin/start-stop-daemon ]] && ! cmp -s $CACHEDIR/sdcard/sbin/start-stop-daemon <(printf '#!/bin/sh\necho "Warning: Fake start-stop-daemon called, doing nothing"'); then
+		mv $CACHEDIR/sdcard/sbin/start-stop-daemon $CACHEDIR/sdcard/sbin/start-stop-daemon.REAL
+		printf '#!/bin/sh\necho "Warning: Fake start-stop-daemon called, doing nothing"' > $CACHEDIR/sdcard/sbin/start-stop-daemon
+		chmod 755 $CACHEDIR/sdcard/sbin/start-stop-daemon
+	fi
+	if [[ -x $CACHEDIR/sdcard/sbin/initctl ]] && ! cmp -s $CACHEDIR/sdcard/sbin/initctl <(printf '#!/bin/sh\necho "Warning: Fake initctl called, doing nothing"'); then
+		mv $CACHEDIR/sdcard/sbin/initctl $CACHEDIR/sdcard/sbin/initctl.REAL
+		printf '#!/bin/sh\necho "Warning: Fake initctl called, doing nothing"' $CACHEDIR/sdcard/sbin/initctl
+		chmod 755 $CACHEDIR/sdcard/sbin/initctl
 	fi
 } #############################################################################
 
