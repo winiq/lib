@@ -26,6 +26,9 @@ satacheck=$(grep sd /proc/partitions)								# check SATA/USB
 
 # Create boot and root file system $1 = boot, $2 = root (Example: create_armbian "/dev/nand1" "/dev/sda3")
 create_armbian() {
+	# read in board info
+	[[ -f /etc/armbian-release ]] && source /etc/armbian-release || read ID </run/machine.id
+
 	# create mount points, mount and clean
 	sync
 	mkdir -p /mnt/bootfs /mnt/rootfs
@@ -56,6 +59,9 @@ create_armbian() {
 	rsync -avrltD  --delete --exclude-from=$EX_LIST  /  /mnt/rootfs | nl | awk '{ printf "%.0f\n", 100*$1/"'"$TODO"'" }' \
 	| dialog --backtitle "$backtitle"  --title "$title" --gauge "\n\n  Creating rootfs on $2 ($USAGE Mb). Please wait!" 10 80
 
+	# run rsync again to silently catch outstanding changes between / and /mnt/rootfs/
+	rsync -avrltD  --delete --exclude-from=$EX_LIST  /  /mnt/rootfs >/dev/null 2>&1
+
 	# creating fstab - root partition
 	sed -e 's,'"$root_partition"','"$2"',g' -i /mnt/rootfs/etc/fstab
 
@@ -77,7 +83,7 @@ EOF
 
 		[[ $DEVICE_TYPE = "a20" ]] && echo "machid=10bb" >> /mnt/bootfs/uEnv.txt
 		# ugly hack becouse we don't have sources for A10 nand uboot
-		if [[ $(cat /var/run/machine.id) == "Cubieboard" ]]; then 
+		if [[ "${ID}" == "Cubieboard" ]]; then 
 			cp /mnt/bootfs/uEnv.txt /mnt/rootfs/boot/uEnv.txt
 			cp /mnt/bootfs/script.bin /mnt/rootfs/boot/script.bin
 			cp /mnt/bootfs/uImage /mnt/rootfs/boot/uImage
