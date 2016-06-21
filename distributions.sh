@@ -176,11 +176,11 @@ chroot $CACHEDIR/sdcard /bin/bash -c "dpkg-reconfigure -f noninteractive tzdata 
 chroot $CACHEDIR/sdcard /bin/bash -c "(echo $ROOTPWD;echo $ROOTPWD;) | passwd root >/dev/null 2>&1"
 
 # create proper fstab
-if [[ $BOOTSIZE -eq 0 ]]; then
-	local device="/dev/mmcblk0p1	/           ext4    defaults,noatime,nodiratime,data=writeback,commit=600,errors=remount-ro"
-else
-	local device="/dev/mmcblk0p2	/           ext4    defaults,noatime,nodiratime,data=writeback,commit=600,errors=remount-ro"
-fi
+#if [[ $BOOTSIZE -eq 0 ]]; then
+	local device="LABEL=ROOTFS	/           ext4    defaults,noatime,nodiratime,data=writeback,commit=600,errors=remount-ro"
+#else
+#	local device="/dev/mmcblk0p2	/           ext4    defaults,noatime,nodiratime,data=writeback,commit=600,errors=remount-ro"
+#fi
 echo "$device        0       0" >> $CACHEDIR/sdcard/etc/fstab
 
 # flash media tuning

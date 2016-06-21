@@ -38,7 +38,7 @@ install_board_specific (){
 	if [[ $BOOTSIZE -gt 0 ]]; then
 		display_alert "Adjusting boot scripts" "$BOARD" "info"
 		[[ -f $CACHEDIR/sdcard/boot/boot.cmd ]] && sed -e 's/p1 /p2 /g' -i $CACHEDIR/sdcard/boot/boot.cmd
-		echo "/dev/mmcblk0p1        /boot   vfat    defaults        0       0" >> $CACHEDIR/sdcard/etc/fstab
+		echo "LABEL=BOOT        /boot   vfat    defaults        0       0" >> $CACHEDIR/sdcard/etc/fstab
 	fi
 
 	if [[ $BOARD == cubox-i && $BRANCH == next && -f $CACHEDIR/sdcard/boot/boot.cmd ]] ; then
