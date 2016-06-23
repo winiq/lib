@@ -132,7 +132,7 @@ if [ -d "$SOURCES/$2/$GITHUBSUBDIR" ]; then
 	if [[ "$3" != "" ]] && [[ "$bar_1" == "$localbar" || "$bar_2" == "$localbar" ]] || [[ "$3" == "" && "$bar_3" == "$localbar" ]] || [[ $bar_1 == "" && $bar_2 == "" ]]; then
 		display_alert "... you have latest sources" "$2 $3" "info"
 	else		
-		if [ $DEBUG_MODE != yes ]; then
+		if [ "$DEBUG_MODE" != yes ]; then
 			display_alert "... your sources are outdated - creating new shallow clone" "$2 $3" "info"
 			if [[ -z "$GITHUBSUBDIR" ]]; then 
 				rm -rf $SOURCES/$2".old"
@@ -304,6 +304,12 @@ prepare_host() {
 		display_alert "Please read documentation to set up proper compilation environment" "..." "info"
 		display_alert "http://www.armbian.com/using-armbian-tools/" "..." "info"
 		exit_with_error "Running this tool on board itself is not supported"
+	fi
+
+	if [[ $(dpkg --print-architecture) == i386 ]]; then
+		display_alert "Please read documentation to set up proper compilation environment" "..." "info"
+		display_alert "http://www.armbian.com/using-armbian-tools/" "..." "info"
+		display_alert "Running this tool on non-x64 build host in not supported officially" "wrn"
 	fi
 
 	# dialog may be used to display progress
