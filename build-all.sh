@@ -18,6 +18,13 @@ from=0
 RELEASE_LIST=("trusty" "xenial" "wheezy" "jessie")
 BRANCH_LIST=("default" "next" "dev")
 
+# add dependencies for converting .md to .pdf
+if [[ ! -f /etc/apt/sources.list.d/nodesource.list ]]; then
+	curl -sL https://deb.nodesource.com/setup_6.x | sudo -E bash -
+	apt-get install -y libfontconfig1 nodejs 
+	npm install -g markdown-pdf
+fi
+
 create_images_list()
 {
 	for board in $SRC/lib/config/boards/*.conf; do

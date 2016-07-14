@@ -70,14 +70,15 @@ debootstrap_ng()
 	mount --bind $DEST/debs/ $CACHEDIR/sdcard/tmp
 
 	install_distribution_specific
-	install_kernel
-	install_board_specific
+	install_common
 
 	# install additional applications
 	[[ $EXTERNAL == yes ]] && install_external_applications
 
 	# install desktop files
 	[[ $BUILD_DESKTOP == yes ]] && install_desktop
+
+	[[ $EXTERNAL_NEW == yes ]] && chroot_installpackages
 
 	# cleanup for install_kernel and install_board_specific
 	umount $CACHEDIR/sdcard/tmp > /dev/null 2>&1

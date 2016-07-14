@@ -29,7 +29,6 @@ backtitle="Armbian building script, http://www.armbian.com | Author: Igor Pecovn
 source $SRC/lib/debootstrap.sh				# System specific install (old)
 source $SRC/lib/debootstrap-ng.sh 			# System specific install (extended)
 source $SRC/lib/distributions.sh 			# System specific install
-source $SRC/lib/boards.sh 				# Board specific install
 source $SRC/lib/desktop.sh 				# Desktop specific install
 source $SRC/lib/common.sh 				# Functions
 source $SRC/lib/makeboarddeb.sh 			# Create board support package
@@ -38,8 +37,9 @@ source $SRC/lib/chroot-buildpackages.sh			# Building packages in chroot
 
 # compress and remove old logs
 mkdir -p $DEST/debug
-(cd $DEST/debug && tar -czf logs-$(date +"%d_%m_%Y-%H_%M_%S").tgz *.log) > /dev/null 2>&1
+(cd $DEST/debug && tar -czf logs-$(<timestamp).tgz *.log) > /dev/null 2>&1
 rm -f $DEST/debug/*.log > /dev/null 2>&1
+date +"%d_%m_%Y-%H_%M_%S" > $DEST/debug/timestamp
 # delete compressed logs older than 7 days
 (cd $DEST/debug && find . -name '*.tgz' -atime +7 -delete) > /dev/null
 
@@ -51,9 +51,6 @@ if [[ -z $ver1 || $ver1 -lt $ver2 ]]; then
 	echo -e "Press \e[0;33m<Ctrl-C>\x1B[0m to abort compilation, \e[0;33m<Enter>\x1B[0m to ignore and continue"
 	read
 fi
-
-# clean unfinished DEB packing
-rm -rf $DEST/debs/*/*/
 
 # Script parameters handling
 for i in "$@"; do
@@ -156,7 +153,7 @@ source $SRC/lib/configuration.sh
 # The name of the job
 VERSION="Armbian $REVISION ${BOARD^} $DISTRIBUTION $RELEASE $BRANCH"
 
-echo `date +"%d.%m.%Y %H:%M:%S"` $VERSION >> $DEST/debug/install.log
+echo `date +"%d.%m.%Y %H:%M:%S"` $VERSION >> $DEST/debug/output.log
 
 display_alert "Starting Armbian build script" "@host" "info"
 
@@ -240,8 +237,8 @@ fi
 
 [[ -n $RELEASE ]] && create_board_package
 
-[[ $KERNEL_ONLY == yes && ($RELEASE == jessie || $RELEASE == xenial) && \
-	$EXPERIMENTAL_BUILDPKG == yes && $(lsb_release -sc) == xenial ]] && chroot_build_packages
+# chroot-buildpackages
+[[ $EXTERNAL_NEW == yes && $(lsb_release -sc) == xenial ]] && chroot_build_packages
 
 if [[ $KERNEL_ONLY != yes ]]; then
 	if [[ $EXTENDED_DEBOOTSTRAP != no ]]; then
@@ -252,12 +249,9 @@ if [[ $KERNEL_ONLY != yes ]]; then
 
 		mount --bind $DEST/debs/ $CACHEDIR/sdcard/tmp
 
-		# add kernel to the image
-		install_kernel
-
 		# install board specific applications
 		install_distribution_specific
-		install_board_specific
+		install_common
 
 		# install external applications
 		[[ $EXTERNAL == yes ]] && install_external_applications

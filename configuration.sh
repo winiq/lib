@@ -11,7 +11,7 @@
 
 # common options
 
-REVISION="5.14$SUBREVISON" # all boards have same revision
+REVISION="5.17$SUBREVISION" # all boards have same revision
 ROOTPWD="1234" # Must be changed @first login
 MAINTAINER="Igor Pecovnik" # deb signature
 MAINTAINERMAIL="igor.pecovnik@****l.com" # deb signature
@@ -36,7 +36,8 @@ MAINLINE_KERNEL_BRANCH="v$(wget -qO-  https://www.kernel.org/finger_banner | gre
 MAINLINE_KERNEL_SOURCE="linux-vanilla"
 
 MAINLINE_UBOOT='git://git.denx.de/u-boot.git'
-MAINLINE_UBOOT_BRANCH="v$(git ls-remote git://git.denx.de/u-boot.git | grep -v rc | grep -v '\^' | tail -1 | cut -d'v' -f 2)"
+#MAINLINE_UBOOT_BRANCH="v$(git ls-remote git://git.denx.de/u-boot.git | grep -v rc | grep -v '\^' | tail -1 | cut -d'v' -f 2)"
+MAINLINE_UBOOT_BRANCH="v2016.05"
 MAINLINE_UBOOT_SOURCE='u-boot'
 
 if [[ -f $SRC/lib/config/sources/$LINUXFAMILY.conf ]]; then
@@ -157,8 +158,16 @@ PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_RELEASE $PACKAGE_LIST_ADDITIONAL"
 [[ $BUILD_DESKTOP == yes ]] && PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_DESKTOP"
 
 # debug
-echo -e "Config: $LINUXCONFIG\nKernel source: $LINUXKERNEL\nBranch: $KERNELBRANCH" >> $DEST/debug/install.log
-echo -e "linuxsource: $LINUXSOURCE\nOffset: $OFFSET\nbootsize: $BOOTSIZE" >> $DEST/debug/install.log
-echo -e "bootloader: $BOOTLOADER\nbootsource: $BOOTSOURCE\nbootbranch: $BOOTBRANCH" >> $DEST/debug/install.log
-echo -e "CPU $CPUMIN / $CPUMAX with $GOVERNOR" >> $DEST/debug/install.log
-
+cat <<-EOF >> $DEST/debug/output.log
+## BUILD CONFIGURATION
+Config: $LINUXCONFIG
+Kernel source: $LINUXKERNEL
+Branch: $KERNELBRANCH
+linuxsource: $LINUXSOURCE
+Offset: $OFFSET
+bootsize: $BOOTSIZE
+bootloader: $BOOTLOADER
+bootsource: $BOOTSOURCE
+bootbranch: $BOOTBRANCH
+CPU $CPUMIN / $CPUMAX with $GOVERNOR
+EOF

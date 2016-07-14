@@ -42,7 +42,7 @@ cleaning()
 			display_alert "Cleaning $DEST/debs for" "$BOARD $BRANCH" "info"
 			# easier than dealing with variable expansion and escaping dashes in file names
 			find $DEST/debs -name '*.deb' | grep -E "${CHOSEN_KERNEL/image/.*}|$CHOSEN_UBOOT" | xargs rm -f
-			[[ -n $RELEASE ]] && rm -f $DEST/debs/$RELEASE/${CHOSEN_ROOTFS}_${REVISION}_${ARCH}.deb
+			[[ -n $RELEASE ]] && rm -f $DEST/debs/$RELEASE/${CHOSEN_ROOTFS}_*_${ARCH}.deb
 		fi
 		;;
 
@@ -179,7 +179,7 @@ display_alert()
 #--------------------------------------------------------------------------------------------------------------------------------
 {
 # log function parameters to install.log
-echo "Displaying message: $@" >> $DEST/debug/install.log
+echo "Displaying message: $@" >> $DEST/debug/output.log
 
 local tmp=""
 [[ -n $2 ]] && tmp="[\e[0;33m $2 \x1B[0m]"
@@ -282,7 +282,7 @@ while [[ $j -lt ${#DISTROS[@]} ]]
 			aptly repo add -force-replace=true -config=config/aptly.conf $DIS $POT/$DIS/*.deb
 		fi
 
-		aptly publish -passphrase=$GPG_PASS -force-overwrite=true -config=config/aptly.conf -component="main" --distribution=$DIS repo $DIS > /dev/null 2>&1
+		aptly publish -passphrase=$GPG_PASS -origin=Armbian -label=Armbian -force-overwrite=true -config=config/aptly.conf -component="main" --distribution=$DIS repo $DIS > /dev/null 2>&1
 
 		#aptly repo show -config=config/aptly.conf $DIS
 
@@ -335,13 +335,14 @@ prepare_host() {
 	gawk gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabi qemu-user-static u-boot-tools uuid-dev zlib1g-dev unzip libusb-1.0-0-dev ntpdate \
 	parted pkg-config libncurses5-dev whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev \
 	nfs-kernel-server btrfs-tools gcc-aarch64-linux-gnu ncurses-term p7zip-full dos2unix dosfstools libc6-dev-armhf-cross libc6-dev-armel-cross\
-	libc6-dev-arm64-cross curl"
+	libc6-dev-arm64-cross curl pdftk"
 
 	# warning: apt-cacher-ng will fail if installed and used both on host and in container/chroot environment with shared network
 	# set NO_APT_CACHER=yes to prevent installation errors in such case
 	if [[ $NO_APT_CACHER != yes ]]; then hostdeps="$hostdeps apt-cacher-ng"; fi
 
 	local codename=$(lsb_release -sc)
+	display_alert "Build host OS release" "${codename:-(unknown)}" "info"
 	if [[ -z $codename || "trusty wily xenial" != *"$codename"* ]]; then
 		display_alert "Host system support was not tested" "${codename:-(unknown)}" "wrn"
 		echo -e "Press \e[0;33m<Ctrl-C>\x1B[0m to abort compilation, \e[0;33m<Enter>\x1B[0m to ignore and continue"
@@ -392,7 +393,7 @@ prepare_host() {
 	test -e /proc/sys/fs/binfmt_misc/qemu-aarch64 || update-binfmts --enable qemu-aarch64
 
 	# create directory structure
-	mkdir -p $SOURCES $DEST/debug $CACHEDIR/rootfs $SRC/userpatches/overlay $SRC/toolchains $SRC/userpatches/patch
+	mkdir -p $SOURCES $DEST/debs/extra $DEST/debug $CACHEDIR/rootfs $SRC/userpatches/overlay $SRC/toolchains $SRC/userpatches/patch
 	find $SRC/lib/patch -type d ! -name . | sed "s%lib/patch%userpatches%" | xargs mkdir -p
 
 	# download external Linaro compiler and missing special dependencies since they are needed for certain sources
