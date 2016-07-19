@@ -293,7 +293,7 @@ prepare_partitions()
 	if [[ $codename == sid || $codename == stretch ]]; then
 		mkopts[ext4]='-O ^64bit,^metadata_csum,uninit_bg -q -m 2'
 	else
-		mkopts[ext4]='-q -m 2'
+		mkopts[ext4]='-q -m 2 -n ROOTFS'
 	fi
 
 	mkopts[fat]='-n BOOT'
