@@ -293,7 +293,7 @@ prepare_partitions()
 	if [[ $codename == sid || $codename == stretch ]]; then
 		mkopts[ext4]='-O ^64bit,^metadata_csum,uninit_bg -q -m 2'
 	else
-		mkopts[ext4]='-q -m 2 -n ROOTFS'
+		mkopts[ext4]='-q -m 2'
 	fi
 
 	mkopts[fat]='-n BOOT'
@@ -375,7 +375,7 @@ prepare_partitions()
 	else
 		if [[ $ROOTFS_TYPE != nfs ]]; then
 			eval mkfs.${mkfs[$ROOTFS_TYPE]} ${mkopts[$ROOTFS_TYPE]} ${LOOP}p2 ${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
-			[[ $ROOTFS_TYPE == ext4 ]] && tune2fs -o journal_data_writeback ${LOOP}p2 > /dev/null
+			[[ $ROOTFS_TYPE == ext4 ]] && tune2fs -L ROOTFS -o journal_data_writeback ${LOOP}p2 > /dev/null
 		fi
 		eval mkfs.${mkfs[$bootfs]} ${mkopts[$bootfs]} ${LOOP}p1 ${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
 	fi
@@ -388,14 +388,14 @@ prepare_partitions()
 	else
 		if [[ $ROOTFS_TYPE != nfs ]]; then
 			mount ${LOOP}p2 $CACHEDIR/mount/
-			echo "/dev/mmcblk0p2 / ${mkfs[$ROOTFS_TYPE]} defaults,noatime,nodiratime${mountopts[$ROOTFS_TYPE]} 0 1" >> $CACHEDIR/sdcard/etc/fstab
+			echo "LABEL=ROOTFS / ${mkfs[$ROOTFS_TYPE]} defaults,noatime,nodiratime${mountopts[$ROOTFS_TYPE]} 0 1" >> $CACHEDIR/sdcard/etc/fstab
 		else
 			echo "/dev/nfs / nfs defaults 0 0" >> $CACHEDIR/sdcard/etc/fstab
 		fi
 		# create /boot on rootfs after it is mounted
 		mkdir -p $CACHEDIR/mount/boot/
 		mount ${LOOP}p1 $CACHEDIR/mount/boot/
-		echo "/dev/mmcblk0p1 /boot ${mkfs[$bootfs]} defaults${mountopts[$bootfs]} 0 2" >> $CACHEDIR/sdcard/etc/fstab
+		echo "LABEL=BOOT /boot ${mkfs[$bootfs]} defaults${mountopts[$bootfs]} 0 2" >> $CACHEDIR/sdcard/etc/fstab
 	fi
 	echo "tmpfs /tmp tmpfs defaults,nosuid 0 0" >> $CACHEDIR/sdcard/etc/fstab
 
