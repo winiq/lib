@@ -468,7 +468,7 @@ create_image()
 	[[ $ROOTFS_TYPE != nfs ]] && umount -l $CACHEDIR/mount
 	losetup -d $LOOP
 
-	mv $CACHEDIR/tmprootfs.raw $CACHEDIR/$VERSION.raw
+	mv $CACHEDIR/tmprootfs.raw $CACHEDIR/$VERSION.img
 	cd $CACHEDIR/
 
 	# stage: compressing or copying image file
