@@ -473,24 +473,24 @@ create_image()
 
 	# stage: compressing or copying image file
 	if [[ $COMPRESS_OUTPUTIMAGE != yes ]]; then
-		display_alert "Copying image file" "$VERSION.raw" "info"
-		mv -f $CACHEDIR/$VERSION.raw $DEST/images/$VERSION.raw
-		display_alert "Done building" "$DEST/images/$VERSION.raw" "info"
+		display_alert "Copying image file" "$VERSION.img" "info"
+		mv -f $CACHEDIR/$VERSION.img $DEST/images/$VERSION.img
+		display_alert "Done building" "$DEST/images/$VERSION.img" "info"
 	else
 		display_alert "Signing and compressing" "Please wait!" "info"
 		# stage: sign with PGP
 		if [[ -n $GPG_PASS ]]; then
-			echo $GPG_PASS | gpg --passphrase-fd 0 --armor --detach-sign --batch --yes $VERSION.raw
+			echo $GPG_PASS | gpg --passphrase-fd 0 --armor --detach-sign --batch --yes $VERSION.img
 			echo $GPG_PASS | gpg --passphrase-fd 0 --armor --detach-sign --batch --yes armbian.txt
 		fi
 		if [[ $SEVENZIP == yes ]]; then
 			FILENAME=$DEST/images/$VERSION.7z
-			7za a -t7z -bd -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on $FILENAME $VERSION.raw* armbian.txt >/dev/null 2>&1
+			7za a -t7z -bd -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on $FILENAME $VERSION.img* armbian.txt >/dev/null 2>&1
 		else
 			FILENAME=$DEST/images/$VERSION.zip
-			zip -FSq $FILENAME $VERSION.raw* armbian.txt
+			zip -FSq $FILENAME $VERSION.img* armbian.txt
 		fi
-		rm -f $VERSION.raw *.asc armbian.txt
+		rm -f $VERSION.img *.asc armbian.txt
 		FILESIZE=$(ls -l --b=M $FILENAME | cut -d " " -f5)
 		display_alert "Done building" "$FILENAME [$FILESIZE]" "info"
 	fi
