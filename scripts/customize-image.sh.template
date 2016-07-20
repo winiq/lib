@@ -27,3 +27,7 @@ case $RELEASE in
 	# your code here
 	;;
 esac
+
+if [[ $BOARD == vegas95 ]]; then
+	cp $CACHEDIR/sdcard/boot/dtb/vega_s95_telos.dtb $CACHEDIR/sdcard/boot/dtb.img
+fi
