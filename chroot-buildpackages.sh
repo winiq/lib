@@ -155,7 +155,7 @@ chroot_build_packages()
 					dpkg -i \${p}_*.deb
 				done
 			fi
-			mv *.deb /root
+			mv *.deb /root 2>/dev/null
 		else
 			display_alert "Failed building" "$package_name" "err"
 		fi
@@ -218,14 +218,29 @@ fetch_from_repo()
 	fi
 
 	local local_hash=$(git rev-parse @ 2>/dev/null)
-	# even though tags are unlikely to change on remote
+
+	local changed=false
 	case $ref_type in
-		branch) local remote_hash=$(git ls-remote -h origin $ref_name | cut -f1) ;;
-		tag) local remote_hash=$(git ls-remote -t origin $ref_name | cut -f1) ;;
-		head) local remote_hash=$(git ls-remote origin HEAD | cut -f1) ;;
+		branch)
+		local remote_hash=$(git ls-remote -h origin "$ref_name" | cut -f1)
+		[[ $local_hash != $remote_hash ]] && changed=true
+		;;
+
+		tag)
+		local remote_hash=$(git ls-remote -t origin "$ref_name" | cut -f1)
+		if [[ $local_hash != $remote_hash ]]; then
+			remote_hash=$(git ls-remote -t origin "$ref_name^{}" | cut -f1)
+			[[ -z $remote_hash || $local_hash != $remote_hash ]] && changed=true
+		fi
+		;;
+
+		head)
+		local remote_hash=$(git ls-remote origin HEAD | cut -f1)
+		[[ $local_hash != $remote_hash ]] && changed=true
+		;;
 	esac
 
-	if [[ $local_hash != $remote_hash ]]; then
+	if [[ $changed == true ]]; then
 		# remote was updated, fetch and check out updates
 		display_alert "... fetching updates"
 		case $ref_type in
@@ -284,7 +299,7 @@ chroot_installpackages()
 	aptly -config=$conf -force-replace=true repo add temp $DEST/debs/extra/$RELEASE/
 	# -gpg-key="128290AF"
 	aptly -secret-keyring="$SRC/lib/extras-buildpkgs/buildpkg.gpg" -batch -config=$conf \
-		 -component=temp -distribution=$RELEASE publish repo temp
+		 -force-overwrite=true -component=temp -distribution=$RELEASE publish repo temp
 	aptly -config=$conf -listen=":8189" serve &
 	local aptly_pid=$!
 	cp $SRC/lib/extras-buildpkgs/buildpkg.key $CACHEDIR/sdcard/tmp/buildpkg.key
@@ -308,6 +323,8 @@ chroot_installpackages()
 	#!/bin/bash
 	cat /tmp/buildpkg.key | apt-key add -
 	apt-get update
+	# uncomment to debug
+	# /bin/bash
 	apt-get install -o Acquire::http::Proxy=\"http://${APT_PROXY_ADDR:-localhost:3142}\" \
 		--show-progress -o DPKG::Progress-Fancy=1 -y $install_list
 	apt-get clean
