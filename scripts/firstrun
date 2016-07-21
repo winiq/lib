@@ -133,14 +133,16 @@ do_expand_rootfs() {
 	DEVICE_ROOTFS=$(grep "/ " /proc/mounts | grep "/dev" | cut -c -7)
 	if [ "${DEVICE_ROOTFS}" = "/dev/sd" ]; then
 		DEVICE=$(grep "/ " /proc/mounts | grep "/dev" | cut -c -8)
+		PARTITIONS=$(( $(grep -c ${DEVICE##*/} /proc/partitions) ))
+		return
 	elif [ "${DEVICE_ROOTFS}" = "/dev/mm" ]; then
 		DEVICE=$(grep "/ " /proc/mounts | grep "/dev" | cut -c -12)
+		PARTITIONS=$(( $(grep -c ${DEVICE##*/}p /proc/partitions) ))
 	fi
 	if [ "${DEVICE}" = "/dev/" ]; then return ; fi
 	QUOTED_DEVICE=$(echo "${DEVICE}" | sed 's:/:\\\/:g')
 	
 	# get count of partitions and their boundaries
-	PARTITIONS=$(( $(grep -c ${DEVICE##*/}p /proc/partitions) ))
 	PARTSTART=$(parted ${DEVICE} unit s print -sm | tail -1 | cut -d: -f2 | sed 's/s//') # start of first partition
 	PARTEND=$(parted ${DEVICE} unit s print -sm | head -3 | tail -1 | cut -d: -f3 | sed 's/s//') # end of first partition
 	STARTFROM=$(( ${PARTEND} + 1 ))
@@ -229,7 +231,12 @@ do_expand_rootfs() {
 	echo -e "\nNew partition table:\n" >>${Log}
 	cat /proc/partitions >>${Log}
 	echo -e "\nNow executing resize2fs to enlarge ${root_partition} to the maximum:\n" >>${Log}
-	resize2fs $root_partition >>${Log} 2>&1 || true
+#	resize2fs $root_partition >>${Log} 2>&1 || true
+		# if ext4 and rootfs should be resized then do it
+#		if [[ $rootfstype == ext4 && ! -f "/root/.no_rootfs_resize" ]]; then
+			echo -e "\n### [resize2fs] Start resizing partition now\n" >>/var/log/armhwinfo.log
+			/sbin/resize2fs ${DEVICE} >>/var/log/armhwinfo.log 2>&1
+#		fi
 	
 	# check whether reboot is necessary for resize2fs to take effect
 	FREESIZE=$(df -hm / | awk '/\// {print $(NF-2)}')
