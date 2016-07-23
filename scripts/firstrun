@@ -132,8 +132,8 @@ do_expand_rootfs() {
 	DEVICE_ROOTFS=$(grep "/ " /proc/mounts | grep "/dev" | cut -c -7)
 	if [ "${DEVICE_ROOTFS}" = "/dev/sd" ]; then
 		DEVICE=$(grep "/ " /proc/mounts | grep "/dev" | cut -c -8)
-		PARTITIONS=$(( $(grep -c ${DEVICE##*/} /proc/partitions) ))
-#		return
+		PARTITIONS=2
+#$(( $(grep -c ${DEVICE##*/} /proc/partitions) ))
 	elif [ "${DEVICE_ROOTFS}" = "/dev/mm" ]; then
 		DEVICE=$(grep "/ " /proc/mounts | grep "/dev" | cut -c -12)
 		PARTITIONS=$(( $(grep -c ${DEVICE##*/}p /proc/partitions) ))
