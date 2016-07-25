@@ -9,6 +9,6 @@ if [ "$IMAGE_TOP" != "" ]; then
    if [ "$version" != "" ]; then
       rm -f $IMAGE_TOP/lib/modules/$version/build
       rm -f $IMAGE_TOP/lib/modules/$version/source
-      mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n "Linux kernel" -d $IMAGE_TOP/boot/vmlinuz* $IMAGE_TOP/boot/uImage 
+      mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -n "Linux kernel" -d $IMAGE_TOP/boot/vmlinuz* $IMAGE_TOP/boot/zImage 
    fi
 fi
