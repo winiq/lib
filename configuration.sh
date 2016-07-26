@@ -110,6 +110,11 @@ if [[ $LINUXCONFIG == *sun* && $BRANCH == default ]]; then
 	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP xorg-dev xutils-dev x11proto-dri2-dev xutils-dev libdrm-dev libvdpau-dev"
 fi
 
+# add vega s95
+if [[ $LINUXCONFIG == *vegas95* ]]; then
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mc synaptic vlc"
+fi
+
 PACKAGE_LIST_EXCLUDE=""
 
 # Release specific packages
