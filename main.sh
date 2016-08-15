@@ -26,8 +26,7 @@ backtitle="Armbian building script, http://www.armbian.com | Author: Igor Pecovn
 [[ -z $CONSOLE_CHAR ]] && export CONSOLE_CHAR="UTF-8"
 
 # Load libraries
-source $SRC/lib/debootstrap.sh				# System specific install (old)
-source $SRC/lib/debootstrap-ng.sh 			# System specific install (extended)
+source $SRC/lib/debootstrap-ng.sh 			# System specific install
 source $SRC/lib/distributions.sh 			# System specific install
 source $SRC/lib/desktop.sh 				# Desktop specific install
 source $SRC/lib/common.sh 				# Functions
@@ -139,7 +138,9 @@ if [[ $KERNEL_ONLY != yes && -z $RELEASE ]]; then
 	RELEASE=$(dialog --stdout --title "Choose a release" --backtitle "$backtitle" --menu "Select one of supported releases" $TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
 	unset options
 	[[ -z $RELEASE ]] && exit_with_error "No release selected"
+fi
 
+if [[ $KERNEL_ONLY != yes && -z $BUILD_DESKTOP ]]; then
 	options=()
 	options+=("no" "Image with console interface")
 	options+=("yes" "Image with desktop environment")
@@ -154,6 +155,7 @@ source $SRC/lib/configuration.sh
 VERSION="Armbian $REVISION ${BOARD^} $DISTRIBUTION $RELEASE $BRANCH"
 
 echo `date +"%d.%m.%Y %H:%M:%S"` $VERSION >> $DEST/debug/output.log
+(cd $SRC/lib; echo "Build script version: $(git rev-parse @)") >> $DEST/debug/output.log
 
 display_alert "Starting Armbian build script" "@host" "info"
 
@@ -171,15 +173,15 @@ if [[ $SYNC_CLOCK != no ]]; then
 fi
 start=`date +%s`
 
-# fetch_from_github [repository, sub directory]
+# fetch_from_repo <url> <dir> <ref> <subdir_flag>
 
 [[ $CLEAN_LEVEL == *sources* ]] && cleaning "sources"
 
-display_alert "source downloading" "@host" "info"
-fetch_from_github "$BOOTLOADER" "$BOOTSOURCE" "$BOOTBRANCH" "yes"
-BOOTSOURCEDIR=$BOOTSOURCE/$GITHUBSUBDIR
-fetch_from_github "$LINUXKERNEL" "$LINUXSOURCE" "$KERNELBRANCH" "yes"
-LINUXSOURCEDIR=$LINUXSOURCE/$GITHUBSUBDIR
+display_alert "Downloading sources" "" "info"
+fetch_from_repo "$BOOTSOURCE" "$BOOTDIR" "$BOOTBRANCH" "yes"
+BOOTSOURCEDIR=$BOOTDIR/${BOOTBRANCH##*:}
+fetch_from_repo "$KERNELSOURCE" "$KERNELDIR" "$KERNELBRANCH" "yes"
+LINUXSOURCEDIR=$KERNELDIR/${KERNELBRANCH##*:}
 
 if [[ -n $MISC1 ]]; then fetch_from_github "$MISC1" "$MISC1_DIR"; fi
 if [[ -n $MISC5 ]]; then fetch_from_github "$MISC5" "$MISC5_DIR"; fi
@@ -212,7 +214,7 @@ if [[ ! -f $DEST/debs/${CHOSEN_UBOOT}_${REVISION}_${ARCH}.deb ]]; then
 	fi
 	cd $SOURCES/$BOOTSOURCEDIR
 	grab_version "$SOURCES/$BOOTSOURCEDIR" "UBOOT_VER"
-	[[ $FORCE_CHECKOUT == yes ]] && advanced_patch "u-boot" "$BOOTSOURCE-$BRANCH" "$BOARD" "$BOOTSOURCE-$BRANCH $UBOOT_VER"
+	[[ $FORCE_CHECKOUT == yes ]] && advanced_patch "u-boot" "$BOOTDIR-$BRANCH" "$BOARD" "$BOOTDIR-$BRANCH $UBOOT_VER"
 	compile_uboot
 fi
 
@@ -241,40 +243,12 @@ fi
 [[ $EXTERNAL_NEW == yes && $(lsb_release -sc) == xenial ]] && chroot_build_packages
 
 if [[ $KERNEL_ONLY != yes ]]; then
-	if [[ $EXTENDED_DEBOOTSTRAP != no ]]; then
-		debootstrap_ng
-	else
-		# create or use prepared root file-system
-		custom_debootstrap
-
-		mount --bind $DEST/debs/ $CACHEDIR/sdcard/tmp
-
-		# install board specific applications
-		install_distribution_specific
-		install_common
-
-		# install external applications
-		[[ $EXTERNAL == yes ]] && install_external_applications
-
-		# install desktop
-		if [[ $BUILD_DESKTOP == yes ]]; then
-			install_desktop
-		fi
-
-		umount $CACHEDIR/sdcard/tmp > /dev/null 2>&1
-
-		# closing image
-		closing_image
-	fi
-
+	debootstrap_ng
 else
 	display_alert "Kernel building done" "@host" "info"
 	display_alert "Target directory" "$DEST/debs/" "info"
 	display_alert "File name" "${CHOSEN_KERNEL}_${REVISION}_${ARCH}.deb" "info"
 fi
-
-# workaround for bug introduced with desktop build -- please remove when fixed
-chmod 777 /tmp
 
 end=`date +%s`
 runtime=$(((end-start)/60))
