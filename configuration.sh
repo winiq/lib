@@ -28,17 +28,20 @@ CACHEDIR=$DEST/cache
 
 # used by multiple sources - reduce code duplication
 if [[ $USE_MAINLINE_GOOGLE_MIRROR == yes ]]; then
-	MAINLINE_KERNEL='https://kernel.googlesource.com/pub/scm/linux/kernel/git/stable/linux-stable'
+	MAINLINE_KERNEL_SOURCE='https://kernel.googlesource.com/pub/scm/linux/kernel/git/stable/linux-stable'
 else
-	MAINLINE_KERNEL='git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git'
+	MAINLINE_KERNEL_SOURCE='git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git'
 fi
-MAINLINE_KERNEL_BRANCH="v$(wget -qO-  https://www.kernel.org/finger_banner | grep "The latest st" | awk '{print $NF}' | head -1)"
-MAINLINE_KERNEL_SOURCE="linux-vanilla"
+# allow upgrades for same major.minor versions
+ARMBIAN_MAINLINE_KERNEL_VERSION="4.6"
+MAINLINE_KERNEL_BRANCH=tag:v$(wget -qO- https://www.kernel.org/finger_banner | awk '{print $NF}' | grep -oE "^${ARMBIAN_MAINLINE_KERNEL_VERSION//./\\.}\.?[[:digit:]]*")
+#MAINLINE_KERNEL_BRANCH="v$(wget -qO- https://www.kernel.org/finger_banner | grep "The latest st" | awk '{print $NF}' | head -1)"
+MAINLINE_KERNEL_DIR="linux-vanilla"
 
-MAINLINE_UBOOT='git://git.denx.de/u-boot.git'
+MAINLINE_UBOOT_SOURCE='git://git.denx.de/u-boot.git'
 #MAINLINE_UBOOT_BRANCH="v$(git ls-remote git://git.denx.de/u-boot.git | grep -v rc | grep -v '\^' | tail -1 | cut -d'v' -f 2)"
-MAINLINE_UBOOT_BRANCH="v2016.05"
-MAINLINE_UBOOT_SOURCE='u-boot'
+MAINLINE_UBOOT_BRANCH='tag:v2016.07'
+MAINLINE_UBOOT_DIR='u-boot'
 
 if [[ -f $SRC/lib/config/sources/$LINUXFAMILY.conf ]]; then
 	source $SRC/lib/config/sources/$LINUXFAMILY.conf
@@ -65,6 +68,7 @@ case $ARCH in
 	KERNEL_COMPILER="aarch64-linux-gnu-"
 	UBOOT_COMPILER="aarch64-linux-gnu-"
 	ARCHITECTURE=arm64
+	INITRD_ARCH=arm64
 	QEMU_BINARY="qemu-aarch64-static"
 	;;
 
@@ -72,18 +76,24 @@ case $ARCH in
 	KERNEL_COMPILER="arm-linux-gnueabihf-"
 	UBOOT_COMPILER="arm-linux-gnueabihf-"
 	ARCHITECTURE=arm
+	INITRD_ARCH=arm
 	QEMU_BINARY="qemu-arm-static"
 	;;
 esac
 
 # temporary hacks/overrides
 case $LINUXFAMILY in
+	sun*i)
+	# 2016.07 compilation fails due to GCC bug
+	# works on Linaro 5.3.1, fails on Ubuntu 5.3.1
+	UBOOT_NEEDS_GCC='< 5.3'
+	;;
 	pine64)
-	# fix for u-boot needing armhf GCC 4.8
-	UBOOT_COMPILER="arm-linux-gnueabihf-"
+	# fix for initramfs update script in board support package
+	[[ $BRANCH == default ]] && INITRD_ARCH=arm
 	;;
 	marvell)
-	# fix for u-boot needing arm soft float
+	# fix for u-boot needing arm soft float compiler
 	UBOOT_COMPILER="arm-linux-gnueabi-"
 	;;
 esac
@@ -165,14 +175,17 @@ PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_RELEASE $PACKAGE_LIST_ADDITIONAL"
 # debug
 cat <<-EOF >> $DEST/debug/output.log
 ## BUILD CONFIGURATION
-Config: $LINUXCONFIG
-Kernel source: $LINUXKERNEL
+Kernel configuration:
+Repository: $KERNELSOURCE
 Branch: $KERNELBRANCH
-linuxsource: $LINUXSOURCE
+Config file: $LINUXCONFIG
+
+U-boot configuration:
+Repository: $BOOTSOURCE
+Branch: $BOOTBRANCH
 Offset: $OFFSET
-bootsize: $BOOTSIZE
-bootloader: $BOOTLOADER
-bootsource: $BOOTSOURCE
-bootbranch: $BOOTBRANCH
-CPU $CPUMIN / $CPUMAX with $GOVERNOR
+Size: $BOOTSIZE
+
+CPU configuration:
+$CPUMIN - $CPUMAX with $GOVERNOR
 EOF

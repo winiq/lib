@@ -1,5 +1,15 @@
 # TODO
 
+### Process
+
+* Switch from chroot to native multiarch
+
+Progress:
+
+* sunxi-mali: fix pkgconfig files for multiarch - **done**
+
+* fbturbo: check xserver plugin search path for multiarch
+
 ### Installing packages to images:
 
 * Add a function for installing packages - **done**
@@ -10,12 +20,11 @@
 
 * Add a variable for installing condition (branch, release, desktop, ...) - **done**
 
-
 ### Building:
 
 * Add a function / code to move packages to $DEST/debs/extras - **done**
 
-* Adjust "debs" option of CLEAN_LEVEL to delete old packages in "extras" subdirectory
+* Adjust "debs" option of CLEAN_LEVEL to delete old packages in "extras" subdirectory - **done**
 
 * Add a code to check if package exists / package needs (re)building - **done**
 
@@ -31,14 +40,6 @@
 
 * Add missing udev rules to appropriate packages - **done**
 
-```
-KERNEL=="disp", MODE="0660", GROUP="video"
-KERNEL=="cedar_dev", MODE="0660", GROUP="video"
-KERNEL=="ump", MODE="0660", GROUP="video"
-KERNEL=="mali", MODE="0660", GROUP="video"
-```
-
-
 ### Package-specific:
 
 * ffmpeg: disable building documentation - **done**
@@ -49,4 +50,11 @@ KERNEL=="mali", MODE="0660", GROUP="video"
 
 * libvdpau-sunxi: select branch (master or dev)
 
-* libcsptr-dev: upgrade to debhelper version 9
+* libcsptr-dev: upgrade to debhelper version 9 - **done**
+
+* hostapd(-realtek): add /etc/hostapd.conf templates
+
+* mpv: test and add configuration file for direct framebuffer output
+
+## Notes
+libcedrus compiled without USE_UMP=1 requires access to /dev/ion
