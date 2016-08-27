@@ -13,6 +13,7 @@
 # cleaning
 # exit_with_error
 # get_package_list_hash
+# create_sources_list
 # fetch_from_github
 # fetch_from_repo
 # display_alert
@@ -102,6 +103,48 @@ exit_with_error()
 get_package_list_hash()
 {
 	echo $(printf '%s\n' $PACKAGE_LIST | sort -u | md5sum | cut -d' ' -f 1)
+}
+
+# create_sources_list <release>
+#
+# <release>: wheezy|jessie|trusty|xenial
+#
+create_sources_list()
+{
+	local release=$1
+	case $release in
+	wheezy|jessie)
+	cat <<-EOF
+	deb http://${DEBIAN_MIRROR} $release main contrib non-free
+	#deb-src http://${DEBIAN_MIRROR} $release main contrib non-free
+
+	deb http://${DEBIAN_MIRROR} ${release}-updates main contrib non-free
+	#deb-src http://${DEBIAN_MIRROR} ${release}-updates main contrib non-free
+
+	deb http://${DEBIAN_MIRROR} ${release}-backports main contrib non-free
+	#deb-src http://${DEBIAN_MIRROR} ${release}-backports main contrib non-free
+
+	deb http://security.debian.org/ ${release}/updates main contrib non-free
+	#deb-src http://security.debian.org/ ${release}/updates main contrib non-free
+	EOF
+	;;
+
+	trusty|xenial)
+	cat <<-EOF
+	deb http://${UBUNTU_MIRROR} $release main restricted universe multiverse
+	#deb-src http://${UBUNTU_MIRROR} $release main restricted universe multiverse
+
+	deb http://${UBUNTU_MIRROR} ${release}-security main restricted universe multiverse
+	#deb-src http://${UBUNTU_MIRROR} ${release}-security main restricted universe multiverse
+
+	deb http://${UBUNTU_MIRROR} ${release}-updates main restricted universe multiverse
+	#deb-src http://${UBUNTU_MIRROR} ${release}-updates main restricted universe multiverse
+
+	deb http://${UBUNTU_MIRROR} ${release}-backports main restricted universe multiverse
+	#deb-src http://${UBUNTU_MIRROR} ${release}-backports main restricted universe multiverse
+	EOF
+	;;
+	esac
 }
 
 # fetch_from_github <URL> <directory> <tag> <tagsintosubdir>
@@ -232,7 +275,8 @@ fetch_from_repo()
 	local local_hash=$(git rev-parse @ 2>/dev/null)
 	case $ref_type in
 		branch)
-		local remote_hash=$(git ls-remote -h $url "$ref_name" | cut -f1)
+		# TODO: grep refs/heads/$name
+		local remote_hash=$(git ls-remote -h $url "$ref_name" | head -1 | cut -f1)
 		[[ -z $local_hash || $local_hash != $remote_hash ]] && changed=true
 		;;
 
@@ -501,7 +545,7 @@ prepare_host() {
 	gawk gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabi qemu-user-static u-boot-tools uuid-dev zlib1g-dev unzip libusb-1.0-0-dev ntpdate \
 	parted pkg-config libncurses5-dev whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev \
 	nfs-kernel-server btrfs-tools gcc-aarch64-linux-gnu ncurses-term p7zip-full dos2unix dosfstools libc6-dev-armhf-cross libc6-dev-armel-cross\
-	libc6-dev-arm64-cross curl pdftk"
+	libc6-dev-arm64-cross curl pdftk gcc-arm-none-eabi"
 
 	local codename=$(lsb_release -sc)
 	display_alert "Build host OS release" "${codename:-(unknown)}" "info"

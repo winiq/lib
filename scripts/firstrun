@@ -30,6 +30,8 @@ cat > /tmp/create_swap.sh <<EOT
 # 
 # create swap and adds it into fstab
 #
+# update console info
+setupcon --save
 # SSH Keys creation
 rm -f /etc/ssh/ssh_host*
 dpkg-reconfigure openssh-server >/dev/null 2>&1
@@ -73,6 +75,10 @@ collect_information() {
 	# get some info about the board
 	source /etc/armbian-release
 	DISTRIBUTION=$(lsb_release -cs)
+	
+	# enable BT on cubietruck
+	[[ "$BOARD" == "cubietruck" ]] && update-rc.d brcm40183-patch defaults
+	
 	case ${DISTRIBUTION} in
 		wheezy)
 			root_device=$(mountpoint -d /)
@@ -93,16 +99,6 @@ collect_information() {
 			;;
 	esac
 } # collect_information
-
-display_alert() {
-	if [ "${DISTRIBUTION}" == "wheezy" ]; then
-		echo -e "[\e[0;32m ok \x1B[0m] ${1}" > /dev/tty1
-	elif [ "${DISTRIBUTION}" == "jessie" ]; then
-		echo -e "[\e[0;32m  OK  \x1B[0m] ${1}" > /dev/tty1
-	else
-		echo -e " * ${1}" > /dev/tty1
-	fi
-}
 
 adjust_sunxi_settings() {
 	# set some mac address for wifi	
@@ -228,7 +224,6 @@ do_expand_rootfs() {
 	FREESIZE=$(df -hm / | awk '/\// {print $(NF-2)}')
 	if [[ "$DISTRIBUTION" == "wheezy" || "$s" != "0" || "$FREESIZE" -lt "152" ]]; then
 		touch /var/run/reboot
-		display_alert "Automatic reboot is needed. Please wait"
 		update-rc.d resize2fs defaults >/dev/null 2>&1
 		echo -e "\n### [firstrun] Automated reboot needed to let /etc/init.d/resize2fs do the job" >>${Log}
 	fi
@@ -246,16 +241,17 @@ main() {
 	collect_information
 
 	if [[ "$rootfstype" == "ext4" && ! -f "/root/.no_rootfs_resize" ]]; then
-		display_alert "Resizing root filesystem."
 		do_expand_rootfs
 	fi
-
-	display_alert "Starting 128Mb emergency swap area creation."
-	display_alert "Starting SSH keys recreation."
-
+	
 	touch /tmp/firstrun_running
 	/tmp/create_swap.sh &
 
+	# old distros can't handle allow-hotplug
+	if [[ "$DISTRIBUTION" == "wheezy" || "$DISTRIBUTION" == "trusty"  ]]; then
+	sed -i "s/allow-hotplug eth0/auto eth0/" /etc/network/interfaces
+	fi
+	
 	# some hardware workarounds
 	case ${LINUXFAMILY} in
 		sun7i|sun8i)

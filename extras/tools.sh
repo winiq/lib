@@ -25,7 +25,7 @@ compile_tools()
 
 	pack_to_deb()
 	{
-		mkdir -p $tmpdir/armbian-tools-${RELEASE}_${REVISION}_${ARCH}/{DEBIAN,usr/bin,lib/udev/rules.d}
+		mkdir -p $tmpdir/armbian-tools-${RELEASE}_${REVISION}_${ARCH}/{DEBIAN,usr/bin,/etc/default,/etc/init.d}
 
 		# set up control file
 		cat <<-END > $tmpdir/armbian-tools-${RELEASE}_${REVISION}_${ARCH}/DEBIAN/control
@@ -35,18 +35,21 @@ compile_tools()
 		Maintainer: $MAINTAINER <$MAINTAINERMAIL>
 		Installed-Size: 1
 		Provides: armbian-tools
-		Conflicts: armbian-tools, sunxi-tools
+		Conflicts: armbian-tools
 		Depends: libc6 (>= 2.10), libusb-1.0-0 (>= 2:1.0.8), libusb-0.1-4, libudev1
 		Section: utils
 		Priority: optional
 		Description: Armbian tools, temper, Cubie bt utils
 		END
-
+		
 		# temper
 		cp $tmpdir/temper/src/pcsensor $tmpdir/armbian-tools-${RELEASE}_${REVISION}_${ARCH}/usr/bin/temper
 		# brcm
 		cp $tmpdir/brcm/{brcm_bt_reset,brcm_patchram_plus} $tmpdir/armbian-tools-${RELEASE}_${REVISION}_${ARCH}/usr/bin
-
+		# brcm configs and service
+		install -m 644 $SRC/lib/scripts/brcm40183					$tmpdir/armbian-tools-${RELEASE}_${REVISION}_${ARCH}/etc/default		
+		install -m 755	$SRC/lib/scripts/brcm40183-patch			$tmpdir/armbian-tools-${RELEASE}_${REVISION}_${ARCH}/etc/init.d
+		
 		cd $tmpdir/armbian-tools-${RELEASE}_${REVISION}_${ARCH}
 		find . -type f ! -regex '.*.hg.*' ! -regex '.*?debian-binary.*' ! -regex '.*?DEBIAN.*' -printf '%P ' | xargs md5sum > DEBIAN/md5sums
 		cd $tmpdir
