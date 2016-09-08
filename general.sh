@@ -14,7 +14,6 @@
 # exit_with_error
 # get_package_list_hash
 # create_sources_list
-# fetch_from_github
 # fetch_from_repo
 # display_alert
 # grab_version
@@ -105,16 +104,20 @@ get_package_list_hash()
 	echo $(printf '%s\n' $PACKAGE_LIST | sort -u | md5sum | cut -d' ' -f 1)
 }
 
-# create_sources_list <release>
+# create_sources_list <release> <basedir>
 #
 # <release>: wheezy|jessie|trusty|xenial
+# <basedir>: path to root directory
 #
 create_sources_list()
 {
 	local release=$1
+	local basedir=$2
+	[[ -z $basedir ]] && exit_with_error "No basedir passed to create_sources_list"
+
 	case $release in
 	wheezy|jessie)
-	cat <<-EOF
+	cat <<-EOF > $basedir/etc/apt/sources.list
 	deb http://${DEBIAN_MIRROR} $release main contrib non-free
 	#deb-src http://${DEBIAN_MIRROR} $release main contrib non-free
 
@@ -127,10 +130,16 @@ create_sources_list()
 	deb http://security.debian.org/ ${release}/updates main contrib non-free
 	#deb-src http://security.debian.org/ ${release}/updates main contrib non-free
 	EOF
+
+	cat <<-EOF > $basedir/etc/apt/preferences.d/90-backports.pref
+	Package: *
+	Pin: release n=${release}-backports
+	Pin-Priority: 100
+	EOF
 	;;
 
 	trusty|xenial)
-	cat <<-EOF
+	cat <<-EOF > $basedir/etc/apt/sources.list
 	deb http://${UBUNTU_MIRROR} $release main restricted universe multiverse
 	#deb-src http://${UBUNTU_MIRROR} $release main restricted universe multiverse
 
@@ -143,82 +152,14 @@ create_sources_list()
 	deb http://${UBUNTU_MIRROR} ${release}-backports main restricted universe multiverse
 	#deb-src http://${UBUNTU_MIRROR} ${release}-backports main restricted universe multiverse
 	EOF
+
+	cat <<-EOF > $basedir/etc/apt/preferences.d/90-backports.pref
+	Package: *
+	Pin: release a=${release}-backports
+	Pin-Priority: 100
+	EOF
 	;;
 	esac
-}
-
-# fetch_from_github <URL> <directory> <tag> <tagsintosubdir>
-#
-# parameters:
-# <URL>: Git repository
-# <directory>: where to place under SOURCES
-# <device>: cubieboard, cubieboard2, cubietruck, ...
-# <description>: additional description text
-# <tagintosubdir>: boolean
-
-fetch_from_github (){
-GITHUBSUBDIR=$3
-local githuburl=$1
-[[ -z "$3" ]] && GITHUBSUBDIR="branchless"
-[[ -z "$4" ]] && GITHUBSUBDIR="" # only kernel and u-boot have subdirs for tags
-if [ -d "$SOURCES/$2/$GITHUBSUBDIR" ]; then
-	cd $SOURCES/$2/$GITHUBSUBDIR
-	git checkout -q $FORCE $3 2> /dev/null	
-	local bar_1=$(git ls-remote $githuburl --tags $GITHUBSUBDIR* | sed -n '1p' | cut -f1 | cut -c1-7)
-	local bar_2=$(git ls-remote $githuburl --tags $GITHUBSUBDIR* | sed -n '2p' | cut -f1 | cut -c1-7)
-	local bar_3=$(git ls-remote $githuburl --tags HEAD * | sed -n '1p' | cut -f1 | cut -c1-7)
-	local localbar="$(git rev-parse HEAD | cut -c1-7)"
-	
-	# debug
-	# echo "git ls-remote $githuburl --tags $GITHUBSUBDIR* | sed -n '1p' | cut -f1"
-	# echo "git ls-remote $githuburl --tags $GITHUBSUBDIR* | sed -n '2p' | cut -f1"	
-	# echo "git ls-remote $githuburl --tags HEAD * | sed -n '1p' | cut -f1"		
-	# echo "$3 - $bar_1 || $bar_2 = $localbar"
-	# echo "$3 - $bar_3 = $localbar"
-	
-	# ===>> workaround >> [[ $bar_1 == "" && $bar_2 == "" ]]
-	
-	if [[ "$3" != "" ]] && [[ "$bar_1" == "$localbar" || "$bar_2" == "$localbar" ]] || [[ "$3" == "" && "$bar_3" == "$localbar" ]] || [[ $bar_1 == "" && $bar_2 == "" ]]; then
-		display_alert "... you have latest sources" "$2 $3" "info"
-	else		
-		if [ "$DEBUG_MODE" != yes ]; then
-			display_alert "... your sources are outdated - creating new shallow clone" "$2 $3" "info"
-			if [[ -z "$GITHUBSUBDIR" ]]; then 
-				rm -rf $SOURCES/$2".old"
-				mv $SOURCES/$2 $SOURCES/$2".old" 
-			else
-				rm -rf $SOURCES/$2/$GITHUBSUBDIR".old"
-				mv $SOURCES/$2/$GITHUBSUBDIR $SOURCES/$2/$GITHUBSUBDIR".old" 
-			fi
-			
-			if [[ -n $3 && -n "$(git ls-remote $1 | grep "$tag")" ]]; then
-				git clone -n $1 $SOURCES/$2/$GITHUBSUBDIR -b $3 --depth 1 || git clone -n $1 $SOURCES/$2/$GITHUBSUBDIR -b $3
-			else
-				git clone -n $1 $SOURCES/$2/$GITHUBSUBDIR --depth 1
-			fi
-		fi
-		cd $SOURCES/$2/$GITHUBSUBDIR
-		git checkout -q
-	fi
-else
-	if [[ -n $3 && -n "$(git ls-remote $1 | grep "$tag")" ]]; then
-		display_alert "... creating a shallow clone" "$2 $3" "info"
-		# Toradex git's doesn't support shallow clone. Need different solution than this.
-		git clone -n $1 $SOURCES/$2/$GITHUBSUBDIR -b $3 --depth 1 || git clone -n $1 $SOURCES/$2/$GITHUBSUBDIR -b $3
-		cd $SOURCES/$2/$GITHUBSUBDIR
-		git checkout -q $3
-	else
-		display_alert "... creating a shallow clone" "$2" "info"
-		git clone -n $1 $SOURCES/$2/$GITHUBSUBDIR --depth 1
-		cd $SOURCES/$2/$GITHUBSUBDIR
-		git checkout -q
-	fi
-
-fi
-cd $SRC
-if [ $? -ne 0 ]; then
-	exit_with_error "Github download failed" "$1"
-fi
 }
 
 # fetch_rom_repo <url> <directory> <ref> <ref_subdir>
@@ -368,21 +309,19 @@ display_alert()
 }
 
 #---------------------------------------------------------------------------------------------------------------------------------
-# grab_version <path> <var_name>
+# grab_version <path>
 #
-# <PATH>: Extract kernel or uboot version from Makefile
-# <var_name>: write version to this variable
+# <path>: Extract kernel or uboot version from $path/Makefile
 #---------------------------------------------------------------------------------------------------------------------------------
-grab_version ()
+grab_version()
 {
-	local var=("VERSION" "PATCHLEVEL" "SUBLEVEL" "EXTRAVERSION")
 	local ver=""
-	for dir in "${var[@]}"; do
-		tmp=$(cat $1/Makefile | grep $dir | head -1 | awk '{print $(NF)}' | cut -d '=' -f 2)"#"
-		[[ $tmp != "#" ]] && ver=$ver$tmp
+	for component in VERSION PATCHLEVEL SUBLEVEL EXTRAVERSION; do
+		tmp=$(cat $1/Makefile | grep $component | head -1 | awk '{print $(NF)}' | cut -d '=' -f 2)"#"
+		[[ $tmp != "#" ]] && ver="$ver$tmp"
 	done
 	ver=${ver//#/.}; ver=${ver%.}; ver=${ver//.-/-}
-	eval $"$2"="$ver"
+	echo $ver
 }
 
 fingerprint_image()
@@ -390,10 +329,10 @@ fingerprint_image()
 #--------------------------------------------------------------------------------------------------------------------------------
 # Saving build summary to the image
 #--------------------------------------------------------------------------------------------------------------------------------
-	display_alert "Fingerprinting" "$VERSION" "info"
+	display_alert "Fingerprinting"
 	cat <<-EOF > $1
 	--------------------------------------------------------------------------------
-	Title:			$VERSION
+	Title:			Armbian $REVISION ${BOARD^} $DISTRIBUTION $RELEASE $BRANCH
 	Kernel:			Linux $VER
 	Build date:		$(date +'%d.%m.%Y')
 	Author:			Igor Pecovnik, www.igorpecovnik.com
@@ -413,15 +352,14 @@ addtorepo()
 # parameter "remove" dumps all and creates new
 # function: cycle trough distributions
 	local distributions=("wheezy" "jessie" "trusty" "xenial")
-	
+
 	# workaround since we dont't build utils for those
-	mkdir -p ../output/debs/extra/wheezy/
-	mkdir -p ../output/debs/extra/trusty/	
+	mkdir -p ../output/debs/extra/{wheezy,trusty}
 	ln -sf ../jessie/utils ../output/debs/extra/wheezy/utils
 	ln -sf ../jessie/utils ../output/debs/extra/trusty/utils
-	
+
 	for release in "${distributions[@]}"; do
-	
+
 		# let's drop from publish if exits
 		if [[ -n $(aptly publish list -config=config/aptly.conf -raw | awk '{print $(NF)}' | grep $release) ]]; then
 			aptly publish drop -config=config/aptly.conf $release > /dev/null 2>&1
@@ -460,15 +398,15 @@ addtorepo()
 		else
 			display_alert "Not adding $release" "main" "wrn"
 		fi
-		
+
 		# adding main distribution packages
 		if find ${POT}${release} -maxdepth 1 -type f -name "*.deb" 2>/dev/null | grep -q .; then
 			display_alert "Adding to repository $release" "main" "ext"
 			aptly repo add -force-replace=$replace -config=config/aptly.conf $release ${POT}${release}/*.deb
 		else
 			display_alert "Not adding $release" "main" "wrn"
-		fi		
-		
+		fi
+
 		# adding utils
 		if find ${POT}extra/$release/utils -maxdepth 1 -type f -name "*.deb" 2>/dev/null | grep -q .; then
 			display_alert "Adding to repository $release" "utils" "ext"
@@ -544,8 +482,8 @@ prepare_host() {
 	local hostdeps="ca-certificates device-tree-compiler pv bc lzop zip binfmt-support build-essential ccache debootstrap ntpdate pigz \
 	gawk gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabi qemu-user-static u-boot-tools uuid-dev zlib1g-dev unzip libusb-1.0-0-dev ntpdate \
 	parted pkg-config libncurses5-dev whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev \
-	nfs-kernel-server btrfs-tools gcc-aarch64-linux-gnu ncurses-term p7zip-full dos2unix dosfstools libc6-dev-armhf-cross libc6-dev-armel-cross\
-	libc6-dev-arm64-cross curl pdftk gcc-arm-none-eabi"
+	nfs-kernel-server btrfs-tools gcc-aarch64-linux-gnu ncurses-term p7zip-full dos2unix dosfstools libc6-dev-armhf-cross libc6-dev-armel-cross \
+	libc6-dev-arm64-cross curl pdftk gcc-arm-none-eabi libnewlib-arm-none-eabi"
 
 	local codename=$(lsb_release -sc)
 	display_alert "Build host OS release" "${codename:-(unknown)}" "info"
@@ -562,7 +500,9 @@ prepare_host() {
 	fi
 
 	if [[ $codename == xenial ]]; then
-		hostdeps="$hostdeps systemd-container udev"
+		hostdeps="$hostdeps systemd-container udev distcc libstdc++-arm-none-eabi-newlib gcc-4.9-arm-linux-gnueabihf \
+			gcc-4.9-aarch64-linux-gnu g++-4.9-arm-linux-gnueabihf g++-4.9-aarch64-linux-gnu g++-5-aarch64-linux-gnu \
+			g++-5-arm-linux-gnueabihf"
 		if systemd-detect-virt -q -c; then
 			display_alert "Running in container" "$(systemd-detect-virt)" "info"
 			# disable apt-cacher unless NO_APT_CACHER=no is not specified explicitly
@@ -581,15 +521,6 @@ prepare_host() {
 	# set NO_APT_CACHER=yes to prevent installation errors in such case
 	if [[ $NO_APT_CACHER != yes ]]; then hostdeps="$hostdeps apt-cacher-ng"; fi
 
-	# Deboostrap in trusty breaks due too old debootstrap. We are installing Xenial package
-	local debootstrap_version=$(dpkg-query -W -f='${Version}\n' debootstrap | cut -f1 -d'+')
-	local debootstrap_minimal="1.0.78"
-
-	if [[ "$debootstrap_version" < "$debootstrap_minimal" ]]; then 
-		display_alert "Upgrading" "debootstrap" "info"
-		dpkg -i $SRC/lib/bin/debootstrap_1.0.78+nmu1ubuntu1.1_all.deb
-	fi
-
 	local deps=()
 	local installed=$(dpkg-query -W -f '${db:Status-Abbrev}|${binary:Package}\n' '*' 2>/dev/null | grep '^ii' | awk -F '|' '{print $2}' | cut -d ':' -f 1)
 
@@ -602,6 +533,8 @@ prepare_host() {
 			${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/output.log'} \
 			${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Installing ${#deps[@]} host dependencies..." $TTY_Y $TTY_X'} \
 			${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
+		# this is needed in case new compilers were installed
+		update-ccache-symlinks
 	fi
 
 	# install aptly separately
@@ -610,7 +543,6 @@ prepare_host() {
 	fi
 
 	# TODO: Check for failed installation process
-	# test exit code propagation for commands in parentheses
 
 	# enable arm binary format so that the cross-architecture chroot environment will work
 	test -e /proc/sys/fs/binfmt_misc/qemu-arm || update-binfmts --enable qemu-arm
@@ -668,8 +600,14 @@ download_toolchain()
 
 	display_alert "Verifying"
 	if grep -q 'BEGIN PGP SIGNATURE' ${filename}.asc; then
-		(gpg --list-keys 8F427EAF || gpg --keyserver keyserver.ubuntu.com --recv-keys 8F427EAF) 2>&1 | tee -a $DEST/debug/output.log
-		gpg --verify --trust-model always -q ${filename}.asc 2>&1 | tee -a $DEST/debug/output.log
+		if [[ ! -d $DEST/.gpg ]]; then
+			mkdir -p $DEST/.gpg
+			chmod 700 $DEST/.gpg
+			touch $DEST/.gpg/gpg.conf
+			chmod 600 $DEST/.gpg/gpg.conf
+		fi
+		(gpg --homedir $DEST/.gpg --list-keys 8F427EAF || gpg --homedir $DEST/.gpg --keyserver keyserver.ubuntu.com --recv-keys 8F427EAF) 2>&1 | tee -a $DEST/debug/output.log
+		gpg --homedir $DEST/.gpg --verify --trust-model always -q ${filename}.asc 2>&1 | tee -a $DEST/debug/output.log
 		[[ ${PIPESTATUS[0]} -eq 0 ]] && verified=true
 	else
 		md5sum -c --status ${filename}.asc && verified=true
