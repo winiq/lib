@@ -33,11 +33,11 @@ create_board_package()
 	Installed-Size: 1
 	Section: kernel
 	Priority: optional
-	Depends: bash, python3-apt
+	Depends: bash
 	Provides: armbian-bsp
 	Conflicts: armbian-bsp
 	Replaces: base-files
-	Recommends: fake-hwclock, initramfs-tools
+	Recommends: bsdutils, parted, python3-apt, util-linux, initramfs-tools, toilet
 	Description: Armbian tweaks for $RELEASE on $BOARD ($BRANCH branch)
 	EOF
 
@@ -45,7 +45,8 @@ create_board_package()
 	cat <<-EOF > $destination/DEBIAN/preinst
 	#!/bin/sh
 	[ "\$1" = "upgrade" ] && touch /var/run/.reboot_required
-	[ -d "/boot/bin" ] && mv /boot/bin /boot/bin.old
+	[ -d "/boot/bin.old" ] && rm -rf /boot/bin.old
+	[ -d "/boot/bin" ] && mv -f /boot/bin /boot/bin.old
 	if [ -L "/etc/network/interfaces" ]; then
 		cp /etc/network/interfaces /etc/network/interfaces.tmp
 		rm /etc/network/interfaces
