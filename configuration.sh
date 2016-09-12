@@ -104,6 +104,11 @@ PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-f
 	network-manager network-manager-gnome xfce4-notifyd gnome-keyring gcr libgck-1-0 libgcr-3-common p11-kit pasystray pavucontrol pulseaudio \
 	paman pavumeter pulseaudio-module-gconf pulseaudio-module-zeroconf pulseaudio-module-bluetooth blueman libpam-gnome-keyring libgl1-mesa-dri"
 
+# add vega
+if [[ $LINUXCONFIG == *vegas* ]]; then
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mc synaptic vlc"
+fi
+
 PACKAGE_LIST_EXCLUDE="xfce4-mixer"
 
 # Release specific packages
