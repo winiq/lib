@@ -12,3 +12,7 @@ if fatload mmc 0:1 ${initrd_loadaddr} uInitrd; then if fatload mmc 0:1 ${loadadd
 if fatload usb 0:1 ${dtb_loadaddr} dtb.img; then setenv dtb_img "1"; else setenv dtb_img "0";fi;fi;
 if fatload usb 0:1 ${initrd_loadaddr} uInitrd; then if fatload usb 0:1 ${loadaddr} uImage; then if test "${dtb_img}" = "1"; then run boot_start;fi;fi;fi;
 
+#setenv boot_start "fdt addr 0x1000000; if test "${nographics}" = "1"; then fdt rm /reserved-memory;
+#setenv mbpp "24"
+#setenv hpd "true"
+#setenv nographics "1"
