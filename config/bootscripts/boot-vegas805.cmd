@@ -7,12 +7,5 @@ setenv loadaddr "0x21000000"
 setenv dtb_loadaddr "0x21800000"
 setenv initrd_loadaddr "0x22000000"
 setenv boot_start bootm ${loadaddr} ${initrd_loadaddr} ${dtb_loadaddr}
-if fatload mmc 0:1 ${dtb_loadaddr} dtb.img; then setenv dtb_img "1"; else setenv dtb_img "0";fi;fi;
-if fatload mmc 0:1 ${initrd_loadaddr} uInitrd; then if fatload mmc 0:1 ${loadaddr} uImage; then if test "${dtb_img}" = "1"; then run boot_start;fi;fi;fi;
-if fatload usb 0:1 ${dtb_loadaddr} dtb.img; then setenv dtb_img "1"; else setenv dtb_img "0";fi;fi;
-if fatload usb 0:1 ${initrd_loadaddr} uInitrd; then if fatload usb 0:1 ${loadaddr} uImage; then if test "${dtb_img}" = "1"; then run boot_start;fi;fi;fi;
-
-#setenv boot_start "fdt addr 0x1000000; if test "${nographics}" = "1"; then fdt rm /reserved-memory;
-#setenv mbpp "24"
-#setenv hpd "true"
-#setenv nographics "1"
+if fatload mmc 0:1 ${initrd_loadaddr} uInitrd; then if fatload mmc 0:1 ${loadaddr} uImage; then if fatload mmc 0:1 ${dtb_loadaddr} dtb.img; then run boot_start;fi;fi;fi;
+if fatload usb 0:1 ${initrd_loadaddr} uInitrd; then if fatload usb 0:1 ${loadaddr} uImage; then if fatload usb 0:1 ${dtb_loadaddr} dtb.img; then run boot_start;fi;fi;fi;
