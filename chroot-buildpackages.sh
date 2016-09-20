@@ -25,13 +25,18 @@ create_chroot()
 	declare -A qemu_binary apt_mirror components
 	qemu_binary['armhf']='qemu-arm-static'
 	qemu_binary['arm64']='qemu-aarch64-static'
-	apt_mirror['jessie']='httpredir.debian.org/debian'
-	apt_mirror['xenial']='ports.ubuntu.com'
+	apt_mirror['jessie']="$DEBIAN_MIRROR"
+	apt_mirror['xenial']="$UBUNTU_MIRROR"
 	components['jessie']='main,contrib'
 	components['xenial']='main,universe,multiverse'
 	display_alert "Creating build chroot" "$release $arch" "info"
 	local includes="ccache,locales,git,ca-certificates,devscripts,libfile-fcntllock-perl,debhelper,rsync,python3,distcc"
-	debootstrap --variant=buildd --components=${components[$release]} --arch=$arch --foreign --include="$includes" $release $target_dir "http://localhost:3142/${apt_mirror[$release]}"
+	if [[ $NO_APT_CACHER != yes ]]; then
+		local mirror_addr="http://localhost:3142/${apt_mirror[$release]}"
+	else
+		local mirror_addr="http://${apt_mirror[$release]}"
+	fi
+	debootstrap --variant=buildd --components=${components[$release]} --arch=$arch --foreign --include="$includes" $release $target_dir $mirror_addr
 	[[ $? -ne 0 || ! -f $target_dir/debootstrap/debootstrap ]] && exit_with_error "Create chroot first stage failed"
 	cp /usr/bin/${qemu_binary[$arch]} $target_dir/usr/bin/
 	[[ ! -f $target_dir/usr/share/keyrings/debian-archive-keyring.gpg ]] && \
@@ -40,7 +45,8 @@ create_chroot()
 	chroot $target_dir /bin/bash -c "/debootstrap/debootstrap --second-stage"
 	[[ $? -ne 0 || ! -f $target_dir/bin/bash ]] && exit_with_error "Create chroot second stage failed"
 	create_sources_list "$release" "$target_dir"
-	echo 'Acquire::http { Proxy "http://localhost:3142"; };' > $target_dir/etc/apt/apt.conf.d/02proxy
+	[[ $NO_APT_CACHER != yes ]] && \
+		echo 'Acquire::http { Proxy "http://localhost:3142"; };' > $target_dir/etc/apt/apt.conf.d/02proxy
 	cat <<-EOF > $target_dir/etc/apt/apt.conf.d/71-no-recommends
 	APT::Install-Recommends "0";
 	APT::Install-Suggests "0";
@@ -70,14 +76,14 @@ chroot_prepare_distccd()
 {
 	local release=$1
 	local arch=$2
-	local dest=$DEST/buildpkg/distcc-wrappers/${release}-${arch}
+	local dest=/tmp/distcc/${release}-${arch}
 	declare -A gcc_version gcc_type
 	gcc_version['jessie']='4.9'
 	gcc_version['xenial']='5'
 	gcc_type['armhf']='arm-linux-gnueabihf'
 	gcc_type['arm64']='aarch64-linux-gnu'
-	mkdir -p $dest
 	rm -f $dest/cmdlist
+	mkdir -p $dest
 	for compiler in gcc cpp g++; do
 		echo "$dest/$compiler" >> $dest/cmdlist
 		ln -sf /usr/bin/${gcc_type[$arch]}-${compiler}-${gcc_version[$release]} $dest/$compiler
@@ -90,12 +96,8 @@ chroot_prepare_distccd()
 	echo "$dest/c++" >> $dest/cmdlist
 	mkdir -p /var/run/distcc/
 	touch /var/run/distcc/${release}-${arch}.pid
-	touch /tmp/distcc-${release}-${arch}.log
-	mkdir -p /tmp/distcc
-	chown distccd /var/run/distcc/
-	chown distccd /var/run/distcc/${release}-${arch}.pid
-	chown distccd /tmp/distcc-${release}-${arch}.log
-	chown distccd /tmp/distcc
+	chown -R distccd /var/run/distcc/
+	chown -R distccd /tmp/distcc
 }
 
 # chroot_build_packages
@@ -106,7 +108,7 @@ chroot_build_packages()
 		for arch in armhf arm64; do
 			display_alert "Starting package building process" "$release $arch" "info"
 
-			local target_dir=$DEST/buildpkg/${release}-${arch}-v2
+			local target_dir=$DEST/buildpkg/${release}-${arch}-v3
 			local distcc_bindaddr="127.0.0.2"
 
 			[[ ! -f $target_dir/root/.debootstrap-complete ]] && create_chroot "$target_dir" "$release" "$arch"
@@ -116,9 +118,10 @@ chroot_build_packages()
 
 			chroot_prepare_distccd $release $arch
 
-			DISTCC_CMDLIST=$DEST/buildpkg/distcc-wrappers/${release}-${arch}/cmdlist TMPDIR=/tmp/distcc distccd --daemon \
+			# DISTCC_TCP_DEFER_ACCEPT=0
+			DISTCC_CMDLIST=/tmp/distcc/${release}-${arch}/cmdlist TMPDIR=/tmp/distcc distccd --daemon \
 				--pid-file /var/run/distcc/${release}-${arch}.pid --listen $distcc_bindaddr --allow 127.0.0.0/24 \
-				--log-file /tmp/distcc-${release}-${arch}.log --user distccd
+				--log-file /tmp/distcc/${release}-${arch}.log --user distccd
 
 			local t=$target_dir/root/.update-timestamp
 			if [[ ! -f $t || $(( ($(date +%s) - $(<$t)) / 86400 )) -gt 7 ]]; then
@@ -134,7 +137,7 @@ chroot_build_packages()
 
 				# check build condition
 				if [[ $(type -t package_checkbuild) == function ]] && ! package_checkbuild; then
-					display_alert "Skipping building $package_name for $release $arch"
+					display_alert "Skipping building $package_name for" "$release $arch"
 					continue
 				fi
 
@@ -179,6 +182,7 @@ chroot_build_packages()
 				cd /root/build
 				if [[ -n "$package_builddeps" ]]; then
 					display_alert "Installing build dependencies"
+					# can be replaced with mk-build-deps
 					deps=()
 					installed=\$(dpkg-query -W -f '\${db:Status-Abbrev}|\${binary:Package}\n' '*' 2>/dev/null | grep '^ii' | awk -F '|' '{print \$2}' | cut -d ':' -f 1)
 					for packet in $package_builddeps; do grep -q -x -e "\$packet" <<< "\$installed" || deps+=("\$packet"); done
@@ -271,11 +275,11 @@ chroot_installpackages()
 		fi
 		unset package_install_target package_checkinstall
 	done
+	[[ $NO_APT_CACHER != yes ]] && local apt_extra="-o Acquire::http::Proxy=\"http://${APT_PROXY_ADDR:-localhost:3142}\" -o Acquire::http::Proxy::localhost=\"DIRECT\""
 	cat <<-EOF > $CACHEDIR/sdcard/tmp/install.sh
 	#!/bin/bash
 	[[ "$remote_only" != yes ]] && apt-key add /tmp/buildpkg.key
-	apt-get -o Acquire::http::Proxy=\"http://${APT_PROXY_ADDR:-localhost:3142}\" \
-		-o Acquire::http::Proxy::localhost="DIRECT" -q update
+	apt-get $apt_extra -q update
 	# uncomment to debug
 	# /bin/bash
 	# TODO: check if package exists in case new config was added
@@ -284,9 +288,7 @@ chroot_installpackages()
 	#		if grep -qE "apt.armbian.com|localhost" <(apt-cache madison \$p); then
 	#		if apt-get -s -qq install \$p; then
 	#fi
-	apt-get -q -o Acquire::http::Proxy=\"http://${APT_PROXY_ADDR:-localhost:3142}\" \
-		-o Acquire::http::Proxy::localhost="DIRECT" \
-		--show-progress -o DPKG::Progress-Fancy=1 install -y $install_list
+	apt-get -q $apt_extra --show-progress -o DPKG::Progress-Fancy=1 install -y $install_list
 	apt-get clean
 	[[ "$remote_only" != yes ]] && apt-key del "925644A6"
 	rm /etc/apt/sources.list.d/armbian-temp.list 2>/dev/null

@@ -49,7 +49,8 @@ create_armbian() {
 	# sata root part
 	satauuid=$(blkid -o export $2 | grep -w UUID)
 	
-	
+	# SD card boot part
+	sduuid=$(blkid -o export /dev/mmcblk0p1 | grep -w UUID)
 	
 	# calculate usage and see if it fits on destination
 	USAGE=$(df -BM | grep ^/dev | head -1 | awk '{print $3}' | tr -cd '[0-9]. \n')
@@ -99,7 +100,7 @@ EOF
 
 		[[ $DEVICE_TYPE = "a20" ]] && echo "machid=10bb" >> /mnt/bootfs/uEnv.txt
 		# ugly hack becouse we don't have sources for A10 nand uboot
-		if [[ "${ID}" == "Cubieboard" || "${BOARD_NAME}" == "Cubieboard" || "${ID}" == "Lime A10" || "${BOARD_NAME}" == "Lime A10" ]]; then 
+		if [[ "${ID}" == "Cubieboard" || "${BOARD_NAME}" == "Cubieboard" || "${ID}" == "Lime A10" || "${BOARD_NAME}" == "Lime A10" ]]; then
 			cp /mnt/bootfs/uEnv.txt /mnt/rootfs/boot/uEnv.txt
 			cp /mnt/bootfs/script.bin /mnt/rootfs/boot/script.bin
 			cp /mnt/bootfs/uImage /mnt/rootfs/boot/uImage
@@ -133,7 +134,7 @@ EOF
 		mkimage -C none -A arm -T script -d /boot/boot.cmd /boot/boot.scr >/dev/null 2>&1 || (echo "Error"; exit 0)
 		mkdir -p /mnt/rootfs/media/mmc/boot
 		if ! grep -q "/boot" /mnt/rootfs/etc/fstab; then # in two partition setup
-			echo "$satauuid        /media/mmc   ext4    defaults        0       0" >> /mnt/rootfs/etc/fstab
+			echo "$sduuid        /media/mmc   ext4    defaults        0       0" >> /mnt/rootfs/etc/fstab
 			echo "/media/mmc/boot   /boot   none    bind        0       0" >> /mnt/rootfs/etc/fstab
 		fi
 		sed -i "s/data=writeback,//" /mnt/rootfs/etc/fstab
@@ -255,7 +256,7 @@ main() {
 
 	# This tool must run under root
 
-	if [[ ${EUID} -ne 0 ]]; then 
+	if [[ ${EUID} -ne 0 ]]; then
 		echo "This tool must run as root. Exiting ..."
 		exit 1
 	fi
@@ -271,11 +272,11 @@ main() {
 	root_partition=$(cat /proc/cmdline | sed -e 's/^.*root=//' -e 's/ .*$//')
 	IFS="'"
 	options=()
-	if [[ -n "$emmccheck" ]]; then 
-		ichip="eMMC"; 
+	if [[ -n "$emmccheck" ]]; then
+		ichip="eMMC";
 		dest_boot=$emmccheck"p1"
 		dest_root=$emmccheck"p1"
-		else 
+		else
 		ichip="NAND"
 		dest_boot="/dev/nand1"
 		dest_root="/dev/nand2"
@@ -298,11 +299,11 @@ main() {
 				title="$ichip install"
 				command="Power off"
 				ShowWarning "This script will erase your $ichip. Continue?"
-				if [[ -n "$emmccheck" ]]; then 
-					umountdevice "$emmccheck" 
+				if [[ -n "$emmccheck" ]]; then
+					umountdevice "$emmccheck"
 					formatemmc "$emmccheck"
 					else
-					umountdevice "/dev/nand" 
+					umountdevice "/dev/nand"
 					formatnand				
 				fi			
 				create_armbian "$dest_boot" "$dest_root"
@@ -312,8 +313,8 @@ main() {
 				command="Power off"
 				checksatatarget				
 				ShowWarning "This script will erase your $ichip and $SDA_ROOT_PART. Continue?"
-				if [[ -n "$emmccheck" ]]; then 
-					umountdevice "$emmccheck" 
+				if [[ -n "$emmccheck" ]]; then
+					umountdevice "$emmccheck"
 					formatemmc "$emmccheck"
 					else
 					umountdevice "/dev/nand"
