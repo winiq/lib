@@ -75,6 +75,9 @@ if [[ $PROGRESS_LOG_TO_FILE != yes ]]; then unset PROGRESS_LOG_TO_FILE; fi
 if [[ $USE_CCACHE != no ]]; then
 	CCACHE=ccache
 	export PATH="/usr/lib/ccache:$PATH"
+	# private ccache directory to avoid permission issues when using build script with "sudo"
+	# see https://ccache.samba.org/manual.html#_sharing_a_cache for alternative solution
+	[[ $PRIVATE_CCACHE == yes ]] && export CCACHE_DIR=$DEST/ccache
 else
 	CCACHE=""
 fi
@@ -166,14 +169,16 @@ start=`date +%s`
 
 [[ $CLEAN_LEVEL == *sources* ]] && cleaning "sources"
 
-display_alert "Downloading sources" "" "info"
-fetch_from_repo "$BOOTSOURCE" "$BOOTDIR" "$BOOTBRANCH" "yes"
-BOOTSOURCEDIR=$BOOTDIR/${BOOTBRANCH##*:}
-fetch_from_repo "$KERNELSOURCE" "$KERNELDIR" "$KERNELBRANCH" "yes"
-LINUXSOURCEDIR=$KERNELDIR/${KERNELBRANCH##*:}
-
-# TODO: move to armbian-tools or extras-buildpkgs
-fetch_from_repo "https://github.com/hglm/a10disp/" "sunxi-display-changer" "branch:master"
+# ignore updates help on building all images - for internal purposes
+if [[ $IGNORE_UPDATES != yes ]]; then
+	display_alert "Downloading sources" "" "info"
+	fetch_from_repo "$BOOTSOURCE" "$BOOTDIR" "$BOOTBRANCH" "yes"
+	BOOTSOURCEDIR=$BOOTDIR/${BOOTBRANCH##*:}
+	fetch_from_repo "$KERNELSOURCE" "$KERNELDIR" "$KERNELBRANCH" "yes"
+	LINUXSOURCEDIR=$KERNELDIR/${KERNELBRANCH##*:}
+	# TODO: move to armbian-tools or extras-buildpkgs
+	fetch_from_repo "https://github.com/hglm/a10disp/" "sunxi-display-changer" "branch:master"
+fi
 
 compile_sunxi_tools
 
