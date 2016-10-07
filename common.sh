@@ -51,10 +51,9 @@ compile_uboot()
 	touch .scmversion
 
 	# patch mainline uboot configuration to boot with old kernels
-	if [[ $BRANCH == default && $LINUXFAMILY == sun*i ]] ; then
-		if ! grep -q "CONFIG_ARMV7_BOOT_SEC_DEFAULT=y" .config ; then
-			echo -e "CONFIG_ARMV7_BOOT_SEC_DEFAULT=y\nCONFIG_OLD_SUNXI_KERNEL_COMPAT=y" >> .config
-		fi
+	if [[ $BRANCH == default && $LINUXFAMILY == sun*i ]] && ! grep -q "CONFIG_ARMV7_BOOT_SEC_DEFAULT=y" .config ; then
+		echo -e "CONFIG_ARMV7_BOOT_SEC_DEFAULT=y\nCONFIG_OLD_SUNXI_KERNEL_COMPAT=y" >> .config
+
 	fi
 
 	eval CCACHE_BASEDIR="$(pwd)" ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} \
@@ -65,19 +64,23 @@ compile_uboot()
 
 	# create .deb package
 	local uboot_name=${CHOSEN_UBOOT}_${REVISION}_${ARCH}
-	mkdir -p $DEST/debs/$uboot_name/usr/lib/$uboot_name $DEST/debs/$uboot_name/DEBIAN
+	mkdir -p $DEST/debs/$uboot_name/usr/lib/{u-boot,$uboot_name} $DEST/debs/$uboot_name/DEBIAN
 
 	# set up postinstall script
 	cat <<-EOF > $DEST/debs/$uboot_name/DEBIAN/postinst
 	#!/bin/bash
+	source /usr/lib/u-boot/platform_install.sh
 	[[ \$DEVICE == /dev/null ]] && exit 0
 	[[ -z \$DEVICE ]] && DEVICE="/dev/mmcblk0"
-	DIR=/usr/lib/$uboot_name
-	$(declare -f write_uboot_platform)
 	write_uboot_platform \$DIR \$DEVICE
 	exit 0
 	EOF
 	chmod 755 $DEST/debs/$uboot_name/DEBIAN/postinst
+
+	cat <<-EOF > $DEST/debs/$uboot_name/usr/lib/u-boot/platform_install.sh
+	DIR=/usr/lib/$uboot_name
+	$(declare -f write_uboot_platform)
+	EOF
 
 	# set up control file
 	cat <<-END > $DEST/debs/$uboot_name/DEBIAN/control
@@ -88,6 +91,9 @@ compile_uboot()
 	Installed-Size: 1
 	Section: kernel
 	Priority: optional
+	Provides: armbian-u-boot
+	Replaces: armbian-u-boot
+	Conflicts: armbian-u-boot, u-boot-sunxi
 	Description: Uboot loader $version
 	END
 
@@ -266,8 +272,8 @@ find_toolchain()
 # $SRC/lib/patch/<dest>/<family>/<device>
 # $SRC/lib/patch/<dest>/<family>
 #
-advanced_patch () {
-
+advanced_patch()
+{
 	local dest=$1
 	local family=$2
 	local device=$3
@@ -310,8 +316,8 @@ advanced_patch () {
 # <file>: path to patch file
 # <description>: additional description text
 #
-process_patch_file() {
-
+process_patch_file()
+{
 	local patch=$1
 	local description=$2
 
@@ -342,31 +348,6 @@ install_external_applications()
 	for plugin in $SRC/lib/extras/*.sh; do
 		source $plugin
 	done
-
-	# sunxi display changer
-	if [[ $BRANCH != next && $LINUXSOURCEDIR == *sunxi* ]]; then
-		cd "$SOURCES/sunxi-display-changer"
-		cp "$SOURCES/$LINUXSOURCEDIR/include/video/sunxi_disp_ioctl.h" .
-		make clean >/dev/null
-		make ARCH=$ARCHITECTURE CC="${KERNEL_COMPILER}gcc" KSRC="$SOURCES/$LINUXSOURCEDIR/" >> $DEST/debug/compilation.log 2>&1
-		install -m 755 a10disp "$CACHEDIR/sdcard/usr/local/bin"
-	fi
-
-	# sunxi display changer
-	# compile it for sun8i just in case sun7i stuff gets ported to sun8i and we're able to use it
-	#if [[ $BRANCH != next && $LINUXSOURCEDIR == *sun8i* ]]; then
-	#	cd "$SOURCES/sunxi-display-changer"
-	#	wget -q "https://raw.githubusercontent.com/linux-sunxi/linux-sunxi/sunxi-3.4/include/video/sunxi_disp_ioctl.h"
-	#	make clean >/dev/null 2>&1
-	#	make ARCH=$ARCHITECTURE CC="${KERNEL_COMPILER}gcc" KSRC="$SOURCES/$LINUXSOURCEDIR/" >> $DEST/debug/compilation.log 2>&1
-	#	install -m 755 a10disp "$CACHEDIR/sdcard/usr/local/bin"
-	#fi
-
-	# h3disp for sun8i/3.4.x
-	if [[ $LINUXFAMILY == sun8i && $BRANCH == default ]]; then
-		install -m 755 "$SRC/lib/scripts/h3disp" "$CACHEDIR/sdcard/usr/local/bin"
-		install -m 755 "$SRC/lib/scripts/h3consumption" "$CACHEDIR/sdcard/usr/local/bin"
-	fi
 }
 
 # write_uboot <loopdev>
