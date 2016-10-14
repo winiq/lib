@@ -19,7 +19,18 @@ USEALLCORES=yes # Use all CPU cores for compiling
 EXIT_PATCHING_ERROR="" # exit patching if failed
 HOST="$BOARD" # set hostname to the board
 CACHEDIR=$DEST/cache
+
+
 [[ -z $ROOTFS_TYPE ]] && ROOTFS_TYPE=ext4 # default rootfs type is ext4
+[[ "ext4 f2fs btrfs nfs fel" != *$ROOTFS_TYPE* ]] && exit_with_error "Unknown rootfs type" "$ROOTFS_TYPE"
+
+# Fixed image size is in 1M dd blocks (MiB)
+# to get size of block device /dev/sdX execute as root:
+# echo $(( $(blockdev --getsize64 /dev/sdX) / 1024 / 1024 ))
+[[ "btrfs f2fs" == *$ROOTFS_TYPE* && -z $FIXED_IMAGE_SIZE ]] && exit_with_error "Please define FIXED_IMAGE_SIZE"
+
+# small SD card with kernel, boot scritpt and .dtb/.bin files
+[[ $ROOTFS_TYPE == nfs ]] && FIXED_IMAGE_SIZE=64
 
 # used by multiple sources - reduce code duplication
 if [[ $USE_MAINLINE_GOOGLE_MIRROR == yes ]]; then
@@ -28,8 +39,8 @@ else
 	MAINLINE_KERNEL_SOURCE='git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git'
 fi
 # allow upgrades for same major.minor versions
-ARMBIAN_MAINLINE_KERNEL_VERSION='4.7'
-MAINLINE_KERNEL_BRANCH=tag:v$(wget -qO- https://www.kernel.org/finger_banner | awk '{print $NF}' | grep -oE "^${ARMBIAN_MAINLINE_KERNEL_VERSION//./\\.}\.?[[:digit:]]*")
+ARMBIAN_MAINLINE_KERNEL_VERSION='4.8'
+MAINLINE_KERNEL_BRANCH=tag:v$(wget -qO- https://www.kernel.org/finger_banner | awk '{print $NF}' | grep -oE "^${ARMBIAN_MAINLINE_KERNEL_VERSION//./\\.}\.?[[:digit:]]*" | tail -1)
 MAINLINE_KERNEL_DIR='linux-vanilla'
 
 MAINLINE_UBOOT_SOURCE='git://git.denx.de/u-boot.git'
@@ -145,8 +156,11 @@ fi
 
 # Build final package list after possible override
 PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_RELEASE $PACKAGE_LIST_ADDITIONAL"
+if [[ $ARCH == arm64 ]]; then
+	PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/iceweasel/iceweasel:armhf}"
+	PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/firefox/firefox:armhf}"
+fi
 [[ $BUILD_DESKTOP == yes ]] && PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_DESKTOP"
-
 # debug
 cat <<-EOF >> $DEST/debug/output.log
 ## BUILD SCRIPT ENVIRONMENT
