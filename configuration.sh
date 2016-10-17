@@ -89,7 +89,7 @@ esac
 PACKAGE_LIST="bc bridge-utils build-essential cpufrequtils device-tree-compiler dosfstools figlet \
 	fbset fping ifenslave-2.6 iw lirc fake-hwclock wpasupplicant psmisc ntp parted rsync sudo curl \
 	dialog crda wireless-regdb ncurses-term python3-apt sysfsutils toilet u-boot-tools unattended-upgrades \
-	unzip usbutils wireless-tools console-setup console-common unicode-data openssh-server initramfs-tools ca-certificates"
+	unzip usbutils wireless-tools console-setup console-common unicode-data openssh-server initramfs-tools ca-certificates mc"
 
 # development related packages. remove when they are not needed for building packages in chroot
 PACKAGE_LIST="$PACKAGE_LIST automake libwrap0-dev libssl-dev libusb-dev libusb-1.0-0-dev libnl-3-dev libnl-genl-3-dev"
@@ -106,6 +106,11 @@ PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-f
 
 # add vega
 if [[ $LINUXCONFIG == *vegas* ]]; then
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mc synaptic vlc"
+fi
+
+# add amlogic
+if [[ $LINUXCONFIG == *amlogic* ]]; then
 	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mc synaptic vlc"
 fi
 

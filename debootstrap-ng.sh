@@ -389,14 +389,14 @@ prepare_partitions()
 	else
 		if [[ $ROOTFS_TYPE != nfs ]]; then
 			mount ${LOOP}p2 $CACHEDIR/mount/
-			echo "LABEL=ROOTFS / ${mkfs[$ROOTFS_TYPE]} defaults,noatime,nodiratime${mountopts[$ROOTFS_TYPE]} 0 1" >> $CACHEDIR/sdcard/etc/fstab
+			echo "/dev/root / ${mkfs[$ROOTFS_TYPE]} defaults,noatime,nodiratime${mountopts[$ROOTFS_TYPE]} 0 1" >> $CACHEDIR/sdcard/etc/fstab
 		else
 			echo "/dev/nfs / nfs defaults 0 0" >> $CACHEDIR/sdcard/etc/fstab
 		fi
 		# create /boot on rootfs after it is mounted
 		mkdir -p $CACHEDIR/mount/boot/
 		mount ${LOOP}p1 $CACHEDIR/mount/boot/
-		echo "LABEL=BOOT /boot ${mkfs[$bootfs]} defaults${mountopts[$bootfs]} 0 2" >> $CACHEDIR/sdcard/etc/fstab
+		#echo "/dev/mmcblk0p1 /boot ${mkfs[$bootfs]} defaults${mountopts[$bootfs]} 0 2" >> $CACHEDIR/sdcard/etc/fstab
 	fi
 	echo "tmpfs /tmp tmpfs defaults,nosuid 0 0" >> $CACHEDIR/sdcard/etc/fstab
 
