@@ -106,12 +106,12 @@ PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-f
 
 # add vega
 if [[ $LINUXCONFIG == *vegas* ]]; then
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mc synaptic vlc"
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP synaptic vlc"
 fi
 
 # add amlogic
 if [[ $LINUXCONFIG == *amlogic* ]]; then
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mc synaptic vlc"
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP synaptic"
 fi
 
 PACKAGE_LIST_EXCLUDE="xfce4-mixer"
