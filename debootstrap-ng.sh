@@ -396,7 +396,7 @@ prepare_partitions()
 		# create /boot on rootfs after it is mounted
 		mkdir -p $CACHEDIR/mount/boot/
 		mount ${LOOP}p1 $CACHEDIR/mount/boot/
-		#echo "/dev/mmcblk0p1 /boot ${mkfs[$bootfs]} defaults${mountopts[$bootfs]} 0 2" >> $CACHEDIR/sdcard/etc/fstab
+		echo "LABEL=BOOT /boot ${mkfs[$bootfs]} defaults${mountopts[$bootfs]} 0 2" >> $CACHEDIR/sdcard/etc/fstab
 	fi
 	echo "tmpfs /tmp tmpfs defaults,nosuid 0 0" >> $CACHEDIR/sdcard/etc/fstab
 
