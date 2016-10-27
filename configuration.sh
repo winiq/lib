@@ -10,7 +10,7 @@
 #
 
 # common options
-REVISION="5.23$SUBREVISION" # all boards have same revision
+REVISION="5.24$SUBREVISION" # all boards have same revision
 ROOTPWD="1234" # Must be changed @first login
 MAINTAINER="Igor Pecovnik" # deb signature
 MAINTAINERMAIL="igor.pecovnik@****l.com" # deb signature
@@ -64,6 +64,11 @@ else
 	exit_with_error "Sources configuration not found" "$LINUXFAMILY"
 fi
 
+if [[ -f $SRC/userpatches/sources/$LINUXFAMILY.conf ]]; then
+	display_alert "Adding user provided $LINUXFAMILY overrides"
+	source $SRC/userpatches/sources/$LINUXFAMILY.conf
+fi
+
 case $ARCH in
 	arm64)
 	[[ -z $KERNEL_COMPILER ]] && KERNEL_COMPILER="aarch64-linux-gnu-"
@@ -97,9 +102,14 @@ if [[ $RELEASE == trusty || $RELEASE == xenial ]]; then DISTRIBUTION="Ubuntu"; e
 # temporary hacks/overrides
 case $LINUXFAMILY in
 	sun*i)
-	# 2016.07 compilation fails due to GCC bug
+	# 2016.07+ compilation fails due to GCC bug
 	# works on Linaro 5.3.1, fails on Ubuntu 5.3.1
 	UBOOT_NEEDS_GCC='< 5.3'
+	;;
+
+	# also affects XU4 next branch
+	odroidxu4)
+	[[ $BRANCH == next ]] && UBOOT_NEEDS_GCC='< 5.3'
 	;;
 esac
 
