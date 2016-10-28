@@ -91,17 +91,18 @@ exit_with_error()
 	display_alert "$_description" "$_highlight" "err"
 	display_alert "Process terminated" "" "info"
 	# TODO: execute run_after_build here?
+	overlayfs_wrapper "cleanup"
 	exit -1
 }
 
-# get_package_list_hash <package_list>
+# get_package_list_hash
 #
-# outputs md5hash for space-separated <package_list>
-# for rootfs cache
+# returns md5 hash for current package list and rootfs cache version
 
 get_package_list_hash()
 {
-	echo $(printf '%s\n' $PACKAGE_LIST | sort -u | md5sum | cut -d' ' -f 1)
+	( printf '%s\n' $PACKAGE_LIST | sort -u; printf '%s\n' $PACKAGE_LIST_EXCLUDE | sort -u; echo "$ROOTFSCACHE_VERSION" ) \
+		| md5sum | cut -d' ' -f 1
 }
 
 # create_sources_list <release> <basedir>
@@ -439,8 +440,8 @@ addtorepo()
 # * creates directory structure
 # * changes system settings
 #
-prepare_host() {
-
+prepare_host()
+{
 	display_alert "Preparing" "host" "info"
 
 	if [[ $(dpkg --print-architecture) == arm* ]]; then
@@ -471,8 +472,8 @@ prepare_host() {
 	local hostdeps="wget ca-certificates device-tree-compiler pv bc lzop zip binfmt-support build-essential ccache debootstrap ntpdate pigz \
 	gawk gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabi qemu-user-static u-boot-tools uuid-dev zlib1g-dev unzip libusb-1.0-0-dev ntpdate \
 	parted pkg-config libncurses5-dev whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev \
-	nfs-kernel-server btrfs-tools ncurses-term p7zip-full dos2unix dosfstools libc6-dev-armhf-cross libc6-dev-armel-cross \
-	libc6-dev-arm64-cross curl pdftk gcc-arm-none-eabi libnewlib-arm-none-eabi"
+	nfs-kernel-server btrfs-tools gcc-aarch64-linux-gnu ncurses-term p7zip-full dos2unix dosfstools libc6-dev-armhf-cross libc6-dev-armel-cross \
+	libc6-dev-arm64-cross curl gcc-arm-none-eabi libnewlib-arm-none-eabi"
 
 	local codename=$(lsb_release -sc)
 	display_alert "Build host OS release" "${codename:-(unknown)}" "info"
@@ -486,7 +487,8 @@ prepare_host() {
 	if [[ $codename == xenial ]]; then
 		hostdeps="$hostdeps systemd-container udev distcc libstdc++-arm-none-eabi-newlib gcc-4.9-arm-linux-gnueabihf \
 			gcc-4.9-aarch64-linux-gnu g++-4.9-arm-linux-gnueabihf g++-4.9-aarch64-linux-gnu g++-5-aarch64-linux-gnu \
-			g++-5-arm-linux-gnueabihf"
+			g++-5-arm-linux-gnueabihf lib32stdc++6 libc6-i386 lib32ncurses5 lib32tinfo5 aptly"
+		grep -q i386 <(dpkg --print-foreign-architectures) || dpkg --add-architecture i386
 		if systemd-detect-virt -q -c; then
 			display_alert "Running in container" "$(systemd-detect-virt)" "info"
 			# disable apt-cacher unless NO_APT_CACHER=no is not specified explicitly
@@ -494,10 +496,7 @@ prepare_host() {
 				display_alert "apt-cacher is disabled, set NO_APT_CACHER=no to override" "" "wrn"
 				NO_APT_CACHER=yes
 			fi
-			# create device nodes for loop devices
-			for i in {0..6}; do
-				mknod -m0660 /dev/loop$i b 7 $i > /dev/null 2>&1
-			done
+			CONTAINER_COMPAT=yes
 		fi
 	fi
 
@@ -513,7 +512,7 @@ prepare_host() {
 	done
 
 	if [[ ${#deps[@]} -gt 0 ]]; then
-		eval '( apt-get update; apt-get -y --no-install-recommends install "${deps[@]}" )' \
+		eval '( apt-get -q update; apt-get -q -y --no-install-recommends install "${deps[@]}" )' \
 			${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/output.log'} \
 			${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Installing ${#deps[@]} host dependencies..." $TTY_Y $TTY_X'} \
 			${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
@@ -521,12 +520,14 @@ prepare_host() {
 		update-ccache-symlinks
 	fi
 
-	# install aptly separately
-	if [[ $(dpkg-query -W -f='${db:Status-Abbrev}\n' aptly 2>/dev/null) != *ii* ]]; then
-		apt-get install -qq -y --no-install-recommends aptly >/dev/null 2>&1
+	if [[ $codename == xenial && $(dpkg-query -W -f='${db:Status-Abbrev}\n' 'zlib1g:i386' 2>/dev/null) != *ii* ]]; then
+		apt-get install -qq -y --no-install-recommends zlib1g:i386 >/dev/null 2>&1
 	fi
 
 	# enable arm binary format so that the cross-architecture chroot environment will work
+	if [[ $KERNEL_ONLY != yes && ! -d /proc/sys/fs/binfmt_misc ]]; then
+		modprobe -q binfmt_misc || exit_with_error "Kernel does not support binfmt_misc"
+	fi
 	test -e /proc/sys/fs/binfmt_misc/qemu-arm || update-binfmts --enable qemu-arm
 	test -e /proc/sys/fs/binfmt_misc/qemu-aarch64 || update-binfmts --enable qemu-aarch64
 
@@ -541,8 +542,6 @@ prepare_host() {
 		download_toolchain "https://releases.linaro.org/components/toolchain/binaries/4.9-2016.02/arm-linux-gnueabihf/gcc-linaro-4.9-2016.02-x86_64_arm-linux-gnueabihf.tar.xz"
 		download_toolchain "https://releases.linaro.org/components/toolchain/binaries/5.2-2015.11-2/arm-linux-gnueabihf/gcc-linaro-5.2-2015.11-2-x86_64_arm-linux-gnueabihf.tar.xz"
 		download_toolchain "https://releases.linaro.org/14.04/components/toolchain/binaries/gcc-linaro-arm-linux-gnueabihf-4.8-2014.04_linux.tar.xz"
-		dpkg --add-architecture i386
-		apt-get install -qq -y --no-install-recommends lib32stdc++6 libc6-i386 lib32ncurses5 lib32tinfo5 zlib1g:i386 >/dev/null 2>&1
 	fi
 
 	[[ ! -f $SRC/userpatches/customize-image.sh ]] && cp $SRC/lib/scripts/customize-image.sh.template $SRC/userpatches/customize-image.sh
@@ -555,7 +554,12 @@ prepare_host() {
 
 	# check free space (basic), doesn't work on Trusty
 	local freespace=$(findmnt --target $SRC -n -o AVAIL -b 2>/dev/null) # in bytes
-	[[ -n $freespace && $(( $freespace / 1073741824 )) -lt 10 ]] && display_alert "Low free space left" "$(( $freespace / 1073741824 )) GiB" "wrn"
+	if [[ -n $freespace && $(( $freespace / 1073741824 )) -lt 10 ]]; then
+		display_alert "Low free space left" "$(( $freespace / 1073741824 )) GiB" "wrn"
+		# pause here since dialog-based menu will hide this message otherwise
+		echo -e "Press \e[0;33m<Ctrl-C>\x1B[0m to abort compilation, \e[0;33m<Enter>\x1B[0m to ignore and continue"
+		read
+	fi
 }
 
 # download_toolchain <url>
