@@ -9,7 +9,7 @@
 #workaround to fix kernel setting permissions
 dmesg -n 1
 chmod 666 /sys/class/graphics/fb*/scal*
-echo 16 | tee /sys/module/amvdec_h265/parameters/dynamic_buf_num_margin
+#echo 16 | tee /sys/module/amvdec_h265/parameters/dynamic_buf_num_margin
 chmod 666 /sys/class/display/mode
 chmod 666 /sys/class/video/axis
 chmod 666 /sys/class/video/screen_mode
