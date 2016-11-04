@@ -90,5 +90,7 @@ install_desktop ()
 		fi
 	fi
 
+	cp $SRC/lib/scripts/amlogic/Test.mp4 $CACHEDIR/sdcard/etc/skel/Desktop/Test.mp4
+
 	umount $CACHEDIR/sdcard/tmp/bin && rm -rf $CACHEDIR/sdcard/tmp/bin
 }

@@ -1,5 +1,5 @@
 setenv cec "cecf"
-setenv m "1080p60hz"
+setenv m "720p60hz"
 setenv m_bpp "24"
 setenv loadaddr "0x11000000"
 setenv dtb_loadaddr "0x1000000"
