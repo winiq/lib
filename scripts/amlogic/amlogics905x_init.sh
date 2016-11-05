@@ -6,133 +6,54 @@
 
 #/etc/webmin/start &
 
-#workaround to fix kernel setting permissions
-dmesg -n 1
-chmod 666 /sys/class/graphics/fb*/scal*
-#echo 16 | tee /sys/module/amvdec_h265/parameters/dynamic_buf_num_margin
-chmod 666 /sys/class/display/mode
-chmod 666 /sys/class/video/axis
-chmod 666 /sys/class/video/screen_mode
-chmod 666 /sys/class/video/disable_video
-chmod 666 /sys/class/tsync/pts_pcrscr
-chmod 666 /sys/class/audiodsp/digital_raw
-chmod 666 /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq
-chmod 666 /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
-chmod 666 /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+hdmimode=720p60hz
+bpp=24
 
-chmod 666 /dev/amvideo
-chmod 666 /dev/amstream*
-chmod 666 /sys/class/ppmgr/ppmgr_3d_mode
-
-
-for x in $(cat /proc/cmdline); do
-        case ${x} in
-                m_bpp=*) export bpp=${x#*=} ;;
-                hdmimode=*) export mode=${x#*=} ;;
-        esac
+for arg in $(cat /proc/cmdline); do
+  case ${arg} in
+    m_bpp=*) bpp=${arg#*=} ;;
+    hdmimode=*) hdmimode=${arg#*=} ;;
+  esac
 done
 
-HPD_STATE=/sys/class/amhdmitx/amhdmitx0/hpd_state
-DISP_CAP=/sys/class/amhdmitx/amhdmitx0/disp_cap
-DISP_MODE=/sys/class/display/mode
-
-echo $mode > $DISP_MODE
-
-common_display_setup() {
-		M="0 0 $(($X - 1)) $(($Y - 1))"
-		Y_VIRT=$(($Y * 2))
-		fbset -fb /dev/fb0 -g $X $Y $X $Y_VIRT $bpp
-        fbset -fb /dev/fb1 -g 32 32 32 32 32
-        echo $mode > /sys/class/display/mode
-        echo 0 > /sys/class/graphics/fb0/free_scale
-        echo 1 > /sys/class/graphics/fb0/freescale_mode
-        echo $M > /sys/class/graphics/fb0/free_scale_axis
-        echo $M > /sys/class/graphics/fb0/window_axis
-        echo 0 > /sys/class/graphics/fb1/free_scale
-}
-
-case $mode in
-		480*)
-			export X=720
-			export Y=480
-			;;
-		576*)
-			export X=720
-			export Y=576
-			;;
-		720p*)
-			export X=1280
-			export Y=720
-			;;
-		1080*)
-			export X=1920
-			export Y=1080
-			;;
-		2160p*)
-			export X=3840
-			export Y=2160
-			;;
-		smpte24hz*)
-			export X=3840
-			export Y=2160
-			;;
-		640x480p60hz*)
-			export X=640
-			export Y=480
-			;;
-		800x480p60hz*)
-			export X=800
-			export Y=480
-			;;
-		800x600p60hz*)
-			export X=800
-			export Y=600
-			;;
-		1024x600p60hz*)
-			export X=1024
-			export Y=600
-			;;
-		1024x768p60hz*)
-			export X=1024
-			export Y=768
-			;;
-		1280x800p60hz*)
-			export X=1280
-			export Y=800
-			;;
-		1280x1024p60hz*)
-			export X=1280
-			export Y=1024
-			;;
-		1360x768p60hz*)
-			export X=1360
-			export Y=768
-			;;
-		1366x768p60hz*)
-			export X=1366
-			export Y=768
-			;;
-		1440x900p60hz*)
-			export X=1440
-			export Y=900
-			;;
-		1600x900p60hz*)
-			export X=1600
-			export Y=900
-			;;
-		1680x1050p60hz*)
-			export X=1680
-			export Y=1050
-			;;
-		1920x1200p60hz*)
-			export X=1920
-			export Y=1200
-			;;
+# Set framebuffer geometry to match the resolution
+case $hdmimode in
+  480*)            X=720  Y=480  ;;
+  576*)            X=720  Y=576  ;;
+  720p*)           X=1280 Y=720  ;;
+  *)               X=1920 Y=1080 ;;
 esac
 
-common_display_setup
+fbset -fb /dev/fb0 -g $X $Y 1920 2160 $bpp
+fbset -fb /dev/fb1 -g 32 32 32 32 32
+echo $hdmimode > /sys/class/display/mode
+echo 0 > /sys/class/graphics/fb0/free_scale
+echo 0 > /sys/class/graphics/fb1/free_scale
+#echo 1 > /sys/class/video/disable_video
 
-# Console unblack
+# Enable scaling for 4K output
+case $hdmimode in
+  4k*|smpte*|2160*)
+    echo 0 0 1919 1079 > /sys/class/graphics/fb0/free_scale_axis
+    echo 0 0 3839 2159 > /sys/class/graphics/fb0/window_axis
+    echo 1920 > /sys/class/graphics/fb0/scale_width
+    echo 1080 > /sys/class/graphics/fb0/scale_height
+    echo 0x10001 > /sys/class/graphics/fb0/free_scale
+  ;;
+esac
+
+# Include deinterlacer into default VFM map
+echo rm default > /sys/class/vfm/map
+echo add default decoder ppmgr deinterlace amvideo > /sys/class/vfm/map
+
+# Enable framebuffer device
 echo 0 > /sys/class/graphics/fb0/blank
-#echo 0 > /sys/class/graphics/fb1/blank
 
+# Blank fb1 to prevent static noise
+echo 1 > /sys/class/graphics/fb1/blank
+
+for part in /sys/block/*/queue/add_random; do
+  echo 0 > "$part"
+done
+
+echo 1536000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
