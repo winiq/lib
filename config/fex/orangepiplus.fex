@@ -7,7 +7,7 @@
 
 [product]
 version = "100"
-machine = "orangepi-plus"
+machine = "Xunlong Orange Pi Plus / Plus 2"
 
 ;---------------------------------------------------------------------------------------------------------
 ; eraseflag - 1 erase data partition, 0 - do not erase data partition
@@ -715,7 +715,7 @@ di_used           = 1
 ;--------------------------------------------------------------------------------
 [mmc0_para]
 sdc_used          = 1
-sdc_detmode       = 3
+sdc_detmode       = 1
 sdc_buswidth      = 4
 sdc_clk           = port:PF02<2><1><2><default>
 sdc_cmd           = port:PF03<2><1><2><default>
@@ -751,7 +751,7 @@ sdc_ddrmode       = 1
 
 [mmc2_para]
 sdc_used          = 1
-sdc_detmode       = 1
+sdc_detmode       = 3
 sdc_buswidth      = 8
 sdc_clk           = port:PC05<3><1><2><default>
 sdc_cmd           = port:PC06<3><1><2><default>
@@ -1115,7 +1115,7 @@ ir_tx               = port:PH07<2><default><default><default>
 pmuic_type = 2
 pmu_gpio0         = port:PL06<1><1><2><1>
 pmu_level0        = 11300
-pmu_level1        = 01100
+pmu_level1        = 1100
 extremity_freq = 1296000000
 max_freq = 1200000000
 min_freq = 480000000

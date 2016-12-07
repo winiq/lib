@@ -25,6 +25,7 @@ create_board_package()
 	# Replaces: base-files is needed to replace /etc/update-motd.d/ files on Xenial
 	# Replaces: unattended-upgrades may be needed to replace /etc/apt/apt.conf.d/50unattended-upgrades
 	# (distributions provide good defaults, so this is not needed currently)
+	# Depends: linux-base is needed for "linux-version" command in initrd cleanup script
 	cat <<-EOF > $destination/DEBIAN/control
 	Package: linux-${RELEASE}-root-${DEB_BRANCH}${BOARD}
 	Version: $REVISION
@@ -33,11 +34,11 @@ create_board_package()
 	Installed-Size: 1
 	Section: kernel
 	Priority: optional
-	Depends: bash
+	Depends: bash, linux-base
 	Provides: armbian-bsp
 	Conflicts: armbian-bsp
 	Replaces: base-files, mpv
-	Recommends: bsdutils, parted, python3-apt, util-linux, initramfs-tools, toilet
+	Recommends: bsdutils, parted, python3-apt, util-linux, initramfs-tools, toilet, wireless-tools
 	Description: Armbian tweaks for $RELEASE on $BOARD ($BRANCH branch)
 	EOF
 
@@ -62,7 +63,7 @@ create_board_package()
 	# postrm script
 	cat <<-EOF > $destination/DEBIAN/postrm
 	#!/bin/sh
-	[ remove = "\$1" ] || [ abort-install = "\$1" ] dpkg-divert --package linux-${RELEASE}-root-${DEB_BRANCH}${BOARD} --remove --rename \
+	[ remove = "\$1" ] || [ abort-install = "\$1" ] && dpkg-divert --package linux-${RELEASE}-root-${DEB_BRANCH}${BOARD} --remove --rename \
 		--divert /etc/mpv/mpv-dist.conf /etc/mpv/mpv.conf
 	exit 0
 	EOF
@@ -139,7 +140,10 @@ create_board_package()
 	mkdir -p $destination/etc/initramfs/post-update.d/
 	cat <<-EOF > $destination/etc/initramfs/post-update.d/99-uboot
 	#!/bin/sh
-	mkimage -A $INITRD_ARCH -O linux -T ramdisk -C gzip -n uInitrd -d \$2 /boot/uInitrd > /dev/null
+	echo "update-initramfs: Converting to u-boot format" >&2
+	tempname="/boot/uInitrd-\$1"
+	mkimage -A $INITRD_ARCH -O linux -T ramdisk -C gzip -n uInitrd -d \$2 \$tempname > /dev/null
+	ln -sf \$(basename \$tempname) /boot/uInitrd > /dev/null 2>&1 || mv \$tempname /boot/uInitrd
 	exit 0
 	EOF
 	chmod +x $destination/etc/initramfs/post-update.d/99-uboot
@@ -171,7 +175,7 @@ create_board_package()
 			# delete unused state files
 			find \$STATEDIR -type f ! -name "\$version" -printf "Removing obsolete file %f\n" -delete
 			# delete unused initrd images
-			find /boot -name "initrd.img*" ! -name "*\$version" -printf "Removing obsolete file %f\n" -delete
+			find /boot -name "initrd.img*" -o -name "uInitrd-*" ! -name "*\$version" -printf "Removing obsolete file %f\n" -delete
 		fi
 	done
 	EOF
@@ -233,6 +237,14 @@ create_board_package()
 	# setting window title for remote sessions
 	install -m 755 $SRC/lib/scripts/ssh-title.sh $destination/etc/profile.d/ssh-title.sh
 
+	# install copy of boot script & environment file
+	mkdir -p $destination/usr/share/armbian/
+	local bootscript_src=${BOOTSCRIPT%%:*}
+	local bootscript_dst=${BOOTSCRIPT##*:}
+	cp $SRC/lib/config/bootscripts/$bootscript_src $destination/usr/share/armbian/$bootscript_dst
+	[[ -n $BOOTENV_FILE && -f $SRC/lib/config/bootenv/$BOOTENV_FILE ]] && \
+		cp $SRC/lib/config/bootenv/$BOOTENV_FILE $destination/usr/share/armbian/armbianEnv.txt
+
 	# h3disp for sun8i/3.4.x
 	if [[ $LINUXFAMILY == sun8i && $BRANCH == default ]]; then
 		install -m 755 $SRC/lib/scripts/h3disp $destination/usr/bin
@@ -248,12 +260,6 @@ create_board_package()
 			else
 				arm-linux-gnueabihf-gcc $SRC/lib/scripts/sunxi-temp/sunxi_tp_temp.c -o $destination/usr/bin/sunxi_tp_temp
 			fi
-
-			# add mpv config for vdpau_sunxi
-			mkdir -p $destination/etc/mpv/
-			cp $SRC/lib/config/mpv_sunxi.conf $destination/etc/mpv/mpv.conf
-			echo "export VDPAU_OSD=1" > $destination/etc/profile.d/90-vdpau.sh
-			chmod 755 $destination/etc/profile.d/90-vdpau.sh
 		fi
 
 		# convert and add fex files
@@ -261,6 +267,14 @@ create_board_package()
 		for i in $(ls -w1 $SRC/lib/config/fex/*.fex | xargs -n1 basename); do
 			fex2bin $SRC/lib/config/fex/${i%*.fex}.fex $destination/boot/bin/${i%*.fex}.bin
 		done
+	fi
+
+	if [[ ( $LINUXFAMILY == sun*i || $LINUXFAMILY == pine64 ) && $BRANCH == default ]]; then
+		# add mpv config for vdpau_sunxi
+		mkdir -p $destination/etc/mpv/
+		cp $SRC/lib/config/mpv_sunxi.conf $destination/etc/mpv/mpv.conf
+		echo "export VDPAU_OSD=1" > $destination/etc/profile.d/90-vdpau.sh
+		chmod 755 $destination/etc/profile.d/90-vdpau.sh
 	fi
 
 	# add some summary to the image

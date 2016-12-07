@@ -11,6 +11,8 @@ setenv console "both"
 setenv disp_mem_reserves "off"
 setenv disp_mode "720p60"
 setenv rootfstype "ext4"
+setenv camera_type "none"
+setenv pine64_lcd "off"
 
 if ext4load mmc 0 ${load_addr} /boot/armbianEnv.txt || fatload mmc 0 ${load_addr} armbianEnv.txt || ext4load mmc 0 ${load_addr} armbianEnv.txt; then
 	env import -t ${load_addr} ${filesize}
@@ -46,17 +48,54 @@ fi
 
 fdt addr ${fdt_addr}
 fdt resize
-fdt set /soc@01c00000/disp@01000000 screen0_output_mode ${fdt_disp_mode}
-#fdt set /soc@01c00000/disp@01000000 screen1_output_mode ${fdt_disp_mode}
+if test "${pine64_lcd}" = "1" || test "${pine64_lcd}" = "on"; then
+	fdt set /soc@01c00000/disp@01000000 screen0_output_type "<0x00000001>"
+	fdt set /soc@01c00000/disp@01000000 screen0_output_mode "<0x00000004>"
+	fdt set /soc@01c00000/disp@01000000 screen1_output_mode ${fdt_disp_mode}
+	
+	fdt set /soc@01c00000/lcd0@01c0c000 lcd_used "<0x00000001>"
+
+	fdt set /soc@01c00000/boot_disp output_type "<0x00000001>"
+	fdt set /soc@01c00000/boot_disp output_mode "<0x00000004>"
+
+	fdt set /soc@01c00000/ctp status "okay"
+	fdt set /soc@01c00000/ctp ctp_used "<0x00000001>"
+	fdt set /soc@01c00000/ctp ctp_name "gt911_DB2"
+else
+	fdt set /soc@01c00000/disp@01000000 screen0_output_mode ${fdt_disp_mode}
+fi
 
 # DVI compatibility
-if test ${disp_dvi_compat} = 1 || test ${disp_dvi_compat} = on; then
+if test "${disp_dvi_compat}" = "1" || test "${disp_dvi_compat}" = "on"; then
 	fdt set /soc@01c00000/hdmi@01ee0000 hdmi_hdcp_enable "<0x00000000>"
 	fdt set /soc@01c00000/hdmi@01ee0000 hdmi_cts_compatibility "<0x00000001>"
 fi
 
 if test "${disp_mem_reserves}" = "off"; then
 	# TODO: Remove reserved memory from DT or disable devices?
+fi
+
+# default, only set status
+if test "${camera_type}" = "s5k4ec"; then
+	fdt set /soc@01c00000/vfe@0/ status "okay"
+	fdt set /soc@01c00000/vfe@0/dev@0/ status "okay"
+fi
+
+# change name, i2c address and vdd voltage
+if test "${camera_type}" = "ov5640"; then
+	fdt set /soc@01c00000/vfe@0/dev@0/ csi0_dev0_mname "ov5640"
+	fdt set /soc@01c00000/vfe@0/dev@0/ csi0_dev0_twi_addr "<0x00000078>"
+	fdt set /soc@01c00000/vfe@0/dev@0/ csi0_dev0_iovdd_vol "<0x001b7740>"
+	fdt set /soc@01c00000/vfe@0/ status "okay"
+	fdt set /soc@01c00000/vfe@0/dev@0/ status "okay"
+fi
+
+# GMAC TX/RX delay processing
+if test -n "${gmac-tx-delay}"; then
+	fdt set /soc@01c00000/eth@01c30000/ tx-delay "<0x${gmac-tx-delay}>"
+fi
+if test -n "${gmac-rx-delay}"; then
+	fdt set /soc@01c00000/eth@01c30000/ rx-delay "<0x${gmac-rx-delay}>"
 fi
 
 booti ${kernel_addr} ${initrd_addr} ${fdt_addr}
