@@ -1,11 +1,5 @@
 #!/bin/sh
 
-#su -c 'echo "audio_on" > /sys/class/amhdmitx/amhdmitx0/config'
-
-#docker daemon
-
-#/etc/webmin/start &
-
 hdmimode=720p60hz
 bpp=24
 
@@ -24,11 +18,19 @@ case $hdmimode in
   *)               X=1920 Y=1080 ;;
 esac
 
-fbset -fb /dev/fb0 -g $X $Y 1920 2160 $bpp
-fbset -fb /dev/fb1 -g 32 32 32 32 32
+M="0 0 $(($X - 1)) $(($Y - 1))"
+Y_VIRT=$(($Y * 2))
+
+fbset -fb /dev/fb0 -g $X $Y $X $Y_VIRT $bpp
+fbset -fb /dev/fb1 -g 1280 720 1280 1440 32
 echo $hdmimode > /sys/class/display/mode
 echo 0 > /sys/class/graphics/fb0/free_scale
+echo 1 > /sys/class/graphics/fb0/freescale_mode
+echo $M > /sys/class/graphics/fb0/free_scale_axis
+echo $M > /sys/class/graphics/fb0/window_axis
+
 echo 0 > /sys/class/graphics/fb1/free_scale
+
 #echo 1 > /sys/class/video/disable_video
 
 # Enable scaling for 4K output
@@ -43,8 +45,8 @@ case $hdmimode in
 esac
 
 # Include deinterlacer into default VFM map
-echo rm default > /sys/class/vfm/map
-echo add default decoder ppmgr deinterlace amvideo > /sys/class/vfm/map
+#echo rm default > /sys/class/vfm/map
+#echo add default decoder ppmgr deinterlace amvideo > /sys/class/vfm/map
 
 # Enable framebuffer device
 echo 0 > /sys/class/graphics/fb0/blank
@@ -52,8 +54,14 @@ echo 0 > /sys/class/graphics/fb0/blank
 # Blank fb1 to prevent static noise
 echo 1 > /sys/class/graphics/fb1/blank
 
-for part in /sys/block/*/queue/add_random; do
-  echo 0 > "$part"
-done
+#for part in /sys/block/*/queue/add_random; do
+#  echo 0 > "$part"
+#done
 
-echo 1536000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
+#echo 1536000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
+
+#su -c 'echo "audio_on" > /sys/class/amhdmitx/amhdmitx0/config'
+
+#docker daemon
+
+/etc/webmin/start &

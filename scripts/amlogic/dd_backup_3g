@@ -10,6 +10,6 @@ mkdir /home/public/arc_mmc;chmod 777 /home/public/arc_mmc
 
 fdisk -l > /home/public/arc_mmc/fdisk_out_part.txt
 
-dd if=/dev/mmcblk0 of=/home/public/arc_mmc/mmcblk0.img bs=16M conv=fsync
+dd if=/dev/mmcblk0 of=/home/public/arc_mmc/mmcblk0.img bs=32M count=100 conv=fsync
 
 echo "STOP ddBR"

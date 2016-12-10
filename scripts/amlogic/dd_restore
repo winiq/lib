@@ -2,6 +2,6 @@
 
 echo "START ddbr"
 
-dd if=/home/public/arc_mmc/mmcblk1.img of=/dev/mmcblk1 conv=fsync bs=1M
+dd if=/home/public/arc_mmc/mmcblk0.img of=/dev/mmcblk0 conv=fsync bs=16M
 
 echo "STOP ddbr"
