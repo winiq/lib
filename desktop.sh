@@ -91,6 +91,7 @@ install_desktop ()
 	fi
 
 	cp $SRC/lib/scripts/amlogic/Test.mp4 $CACHEDIR/sdcard/etc/skel/Desktop/Test.mp4
+	cp $SRC/lib/scripts/amlogic/autologin $CACHEDIR/sdcard/root/autologin
 
 	umount $CACHEDIR/sdcard/tmp/bin && rm -rf $CACHEDIR/sdcard/tmp/bin
 }

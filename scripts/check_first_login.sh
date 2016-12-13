@@ -33,16 +33,29 @@ if [ "$-" != "${-#*i}" ]; then
 		fi
 
 		# check whether desktop environment has to be considered
-		if [ -f /etc/init.d/nodm ] ; then
-			sed -i "s/NODM_USER=\(.*\)/NODM_USER=${RealUserName}/" /etc/default/nodm
-			sed -i "s/NODM_ENABLED=\(.*\)/NODM_ENABLED=true/g" /etc/default/nodm
-			if [[ -z $ConfigureDisplay || $ConfigureDisplay == n || $ConfigureDisplay == N ]]; then
-				echo -e "\n\e[1m\e[39mNow starting desktop environment...\x1B[0m\n"
-				sleep 3
-				service nodm stop
-				sleep 1
-				service nodm start
-			fi
+#		if [ -f /etc/init.d/nodm ] ; then
+#			sed -i "s/NODM_USER=\(.*\)/NODM_USER=${RealUserName}/" /etc/default/nodm
+#			sed -i "s/NODM_ENABLED=\(.*\)/NODM_ENABLED=true/g" /etc/default/nodm
+#			if [[ -z $ConfigureDisplay || $ConfigureDisplay == n || $ConfigureDisplay == N ]]; then
+#				echo -e "\n\e[1m\e[39mNow starting desktop environment...\x1B[0m\n"
+#				sleep 3
+#				service nodm stop
+#				sleep 1
+#				service nodm start
+#			fi
+#		fi
+
+		# autologin for Desktop
+		if [ -f /root/autologin ] ; then
+			touch /etc/systemd/system/getty@tty1.service.d/20-autologin.conf
+			echo "[Service]" >> /etc/systemd/system/getty@tty1.service.d/20-autologin.conf
+			echo "ExecStart=" >> /etc/systemd/system/getty@tty1.service.d/20-autologin.conf
+			echo "ExecStart=-/sbin/agetty --autologin "${RealUserName}" --noclear %I 38400 linux" >> /etc/systemd/system/getty@tty1.service.d/20-autologin.conf
+			echo '[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx' >> /home/${RealUserName}/.bashrc
+			echo -e "Sucesfuul setup Users. Reboot system.\n"
+			sync
+			sleep 3
+			reboot
 		fi
 	fi
 fi
