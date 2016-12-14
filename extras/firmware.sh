@@ -23,7 +23,7 @@ build_firmware()
 	cp -R $SRC/lib/bin/firmware-overlay/* $SOURCES/$plugin_dir/lib/firmware
 
 	# cleanup what's not needed for sure
-	rm -rf $SOURCES/$plugin_dir/lib/firmware/{amdgpu,amd-ucode,radeon,nvidia,matrox}
+	rm -rf $SOURCES/$plugin_dir/lib/firmware/{amdgpu,amd-ucode,radeon,nvidia,matrox,.git}
 	cd $SOURCES/$plugin_dir
 
 	# set up control file
@@ -57,4 +57,4 @@ REPLACE=""
 
 # install basic firmware by default
 display_alert "Installing linux firmware" "$REVISION" "info"
-chroot $CACHEDIR/sdcard /bin/bash -c "dpkg -i /tmp/debs/armbian-firmware_${REVISION}_${ARCH}.deb" >> $DEST/debug/install.log
+chroot $CACHEDIR/$SDCARD /bin/bash -c "dpkg -i /tmp/debs/armbian-firmware_${REVISION}_${ARCH}.deb" >> $DEST/debug/install.log

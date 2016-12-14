@@ -182,12 +182,15 @@ chroot_build_packages()
 				$(declare -f display_alert)
 				cd /root/build
 				if [[ -n "$package_builddeps" ]]; then
-					display_alert "Installing build dependencies"
 					# can be replaced with mk-build-deps
 					deps=()
 					installed=\$(dpkg-query -W -f '\${db:Status-Abbrev}|\${binary:Package}\n' '*' 2>/dev/null | grep '^ii' | awk -F '|' '{print \$2}' | cut -d ':' -f 1)
 					for packet in $package_builddeps; do grep -q -x -e "\$packet" <<< "\$installed" || deps+=("\$packet"); done
-					[[ \${#deps[@]} -gt 0 ]] && apt-get -y -q --no-install-recommends --show-progress -o DPKG::Progress-Fancy=1 install "\${deps[@]}"
+					if [[ \${#deps[@]} -gt 0 ]]; then
+						display_alert "Installing build dependencies"
+						apt-get -y -q update
+						apt-get -y -q --no-install-recommends --show-progress -o DPKG::Progress-Fancy=1 install "\${deps[@]}"
+					fi
 				fi
 				display_alert "Copying sources"
 				rsync -aq /root/sources/$package_name /root/build/
@@ -224,7 +227,7 @@ chroot_build_packages()
 
 				fetch_from_repo "$package_repo" "extra/$package_name" "$package_ref"
 
-				eval systemd-nspawn -a -q -D $target_dir --tmpfs=/root/build --tmpfs=/tmp --bind-ro $SRC/lib/extras-buildpkgs/:/root/overlay \
+				eval systemd-nspawn -a -q -D $target_dir --tmpfs=/root/build --tmpfs=/tmp:mode=777 --bind-ro $SRC/lib/extras-buildpkgs/:/root/overlay \
 					--bind-ro $SRC/sources/extra/:/root/sources /bin/bash -c "/root/build.sh" 2>&1 \
 					${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/buildpkg.log'}
 				[[ ${PIPESTATUS[0]} -eq 2 ]] && failed+=("$package_name:$release:$arch")
@@ -258,13 +261,13 @@ chroot_installpackages_local()
 		 -gpg-key="925644A6" -passphrase="testkey1234" -component=temp -distribution=$RELEASE publish repo temp
 	aptly -config=$conf -listen=":8189" serve &
 	local aptly_pid=$!
-	cp $SRC/lib/extras-buildpkgs/buildpkg.key $CACHEDIR/sdcard/tmp/buildpkg.key
-	cat <<-'EOF' > $CACHEDIR/sdcard/etc/apt/preferences.d/90-armbian-temp.pref
+	cp $SRC/lib/extras-buildpkgs/buildpkg.key $CACHEDIR/$SDCARD/tmp/buildpkg.key
+	cat <<-'EOF' > $CACHEDIR/$SDCARD/etc/apt/preferences.d/90-armbian-temp.pref
 	Package: *
 	Pin: origin "localhost"
 	Pin-Priority: 550
 	EOF
-	cat <<-EOF > $CACHEDIR/sdcard/etc/apt/sources.list.d/armbian-temp.list
+	cat <<-EOF > $CACHEDIR/$SDCARD/etc/apt/sources.list.d/armbian-temp.list
 	deb http://localhost:8189/ $RELEASE temp
 	EOF
 	chroot_installpackages
@@ -285,7 +288,7 @@ chroot_installpackages()
 		unset package_install_target package_checkinstall
 	done
 	[[ $NO_APT_CACHER != yes ]] && local apt_extra="-o Acquire::http::Proxy=\"http://${APT_PROXY_ADDR:-localhost:3142}\" -o Acquire::http::Proxy::localhost=\"DIRECT\""
-	cat <<-EOF > $CACHEDIR/sdcard/tmp/install.sh
+	cat <<-EOF > $CACHEDIR/$SDCARD/tmp/install.sh
 	#!/bin/bash
 	[[ "$remote_only" != yes ]] && apt-key add /tmp/buildpkg.key
 	apt-get $apt_extra -q update
@@ -305,6 +308,6 @@ chroot_installpackages()
 	rm /tmp/buildpkg.key 2>/dev/null
 	rm -- "\$0"
 	EOF
-	chmod +x $CACHEDIR/sdcard/tmp/install.sh
-	chroot $CACHEDIR/sdcard /bin/bash -c "/tmp/install.sh"
+	chmod +x $CACHEDIR/$SDCARD/tmp/install.sh
+	chroot $CACHEDIR/$SDCARD /bin/bash -c "/tmp/install.sh"
 } #############################################################################

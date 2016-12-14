@@ -42,7 +42,7 @@ esac
 echo 0 > /sys/class/graphics/fb0/blank
 
 # Blank fb1 to prevent static noise
-#echo 1 > /sys/class/graphics/fb1/blank
+#echo 0 > /sys/class/graphics/fb1/blank
 
 #for part in /sys/block/*/queue/add_random; do
 #  echo 0 > "$part"

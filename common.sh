@@ -25,11 +25,14 @@
 
 compile_uboot()
 {
-	local ubootdir="$1"
-
+	if [[ $USE_OVERLAYFS == yes ]]; then
+		local ubootdir=$(overlayfs_wrapper "wrap" "$SOURCES/$BOOTSOURCEDIR" "u-boot_${LINUXFAMILY}_${BRANCH}")
+	else
+		local ubootdir="$SOURCES/$BOOTSOURCEDIR"
+	fi
 	cd "$ubootdir"
 
-	[[ $FORCE_CHECKOUT == yes ]] && advanced_patch "u-boot" "$BOOTDIR-$BRANCH" "$BOARD" "$BOOTDIR-$BRANCH"
+	[[ $FORCE_CHECKOUT == yes ]] && advanced_patch "u-boot" "$BOOTPATCHDIR" "$BOARD" "${LINUXFAMILY}-${BOARD}-${BRANCH}"
 
 	# create patch for manual source changes
 	[[ $CREATE_PATCHES == yes ]] && userpatch_create "u-boot"
@@ -38,6 +41,11 @@ compile_uboot()
 	local version=$(grab_version "$ubootdir")
 
 	display_alert "Compiling uboot" "$version" "info"
+	# if requires specific toolchain, check if default is suitable
+	if [[ -n $UBOOT_NEEDS_GCC ]] && ! check_toolchain "UBOOT" "$UBOOT_NEEDS_GCC" ; then
+		# try to find suitable in $SRC/toolchains, exit if not found
+		find_toolchain "UBOOT" "$UBOOT_NEEDS_GCC" "UBOOT_TOOLCHAIN"
+	fi
 	display_alert "Compiler version" "${UBOOT_COMPILER}gcc $(eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} ${UBOOT_COMPILER}gcc -dumpversion)" "info"
 
 	eval CCACHE_BASEDIR="$(pwd)" ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} \
@@ -67,10 +75,11 @@ compile_uboot()
 
 	# create .deb package
 	local uboot_name=${CHOSEN_UBOOT}_${REVISION}_${ARCH}
-	mkdir -p $DEST/debs/$uboot_name/usr/lib/{u-boot,$uboot_name} $DEST/debs/$uboot_name/DEBIAN
+	rm -rf $uboot_name
+	mkdir -p $uboot_name/usr/lib/{u-boot,$uboot_name} $uboot_name/DEBIAN
 
 	# set up postinstall script
-	cat <<-EOF > $DEST/debs/$uboot_name/DEBIAN/postinst
+	cat <<-EOF > $uboot_name/DEBIAN/postinst
 	#!/bin/bash
 	source /usr/lib/u-boot/platform_install.sh
 	[[ \$DEVICE == /dev/null ]] && exit 0
@@ -78,19 +87,20 @@ compile_uboot()
 	[[ \$(type -t setup_write_uboot_platform) == function ]] && setup_write_uboot_platform
 	echo "Updating u-boot on device \$DEVICE" >&2
 	write_uboot_platform \$DIR \$DEVICE
+	sync
 	exit 0
 	EOF
-	chmod 755 $DEST/debs/$uboot_name/DEBIAN/postinst
+	chmod 755 $uboot_name/DEBIAN/postinst
 
 	# declare -f on non-defined function does not do anything
-	cat <<-EOF > $DEST/debs/$uboot_name/usr/lib/u-boot/platform_install.sh
+	cat <<-EOF > $uboot_name/usr/lib/u-boot/platform_install.sh
 	DIR=/usr/lib/$uboot_name
 	$(declare -f write_uboot_platform)
 	$(declare -f setup_write_uboot_platform)
 	EOF
 
 	# set up control file
-	cat <<-END > $DEST/debs/$uboot_name/DEBIAN/control
+	cat <<-END > $uboot_name/DEBIAN/control
 	Package: linux-u-boot-${BOARD}-${BRANCH}
 	Version: $REVISION
 	Architecture: $ARCH
@@ -107,25 +117,25 @@ compile_uboot()
 	# copy files to build directory
 	for f in $UBOOT_FILES; do
 		[[ ! -f $f ]] && exit_with_error "U-boot file not found" "$(basename $f)"
-		cp $f $DEST/debs/$uboot_name/usr/lib/$uboot_name
+		cp $f $uboot_name/usr/lib/$uboot_name
 	done
 
-	cd $DEST/debs
-	display_alert "Building deb" "$uboot_name.deb" "info"
+	display_alert "Building deb" "${uboot_name}.deb" "info"
 	eval 'dpkg -b $uboot_name 2>&1' ${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'}
 	rm -rf $uboot_name
 
-	local filesize=$(wc -c $DEST/debs/$uboot_name.deb | cut -f 1 -d ' ')
+	[[ ! -f ${uboot_name}.deb || $(stat -c '%s' "${uboot_name}.deb") -lt 5000 ]] && exit_with_error "Building u-boot failed"
 
-	if [[ $filesize -lt 50000 ]]; then
-		rm $DEST/debs/$uboot_name.deb
-		exit_with_error "Building u-boot failed, check configuration"
-	fi
+	mv ${uboot_name}.deb $DEST/debs/
 }
 
 compile_kernel()
 {
-	local kerneldir="$1"
+	if [[ $USE_OVERLAYFS == yes ]]; then
+		local kerneldir=$(overlayfs_wrapper "wrap" "$SOURCES/$LINUXSOURCEDIR" "kernel_${LINUXFAMILY}_${BRANCH}")
+	else
+		local kerneldir="$SOURCES/$LINUXSOURCEDIR"
+	fi
 	cd "$kerneldir"
 
 	# this is a patch that Ubuntu Trusty compiler works
@@ -144,6 +154,11 @@ compile_kernel()
 	local version=$(grab_version "$kerneldir")
 
 	display_alert "Compiling $BRANCH kernel" "$version" "info"
+	# if requires specific toolchain, check if default is suitable
+	if [[ -n $KERNEL_NEEDS_GCC ]] && ! check_toolchain "$KERNEL" "$KERNEL_NEEDS_GCC" ; then
+		# try to find suitable in $SRC/toolchains, exit if not found
+		find_toolchain "KERNEL" "$KERNEL_NEEDS_GCC" "KERNEL_TOOLCHAIN"
+	fi
 	display_alert "Compiler version" "${KERNEL_COMPILER}gcc $(eval ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} ${KERNEL_COMPILER}gcc -dumpversion)" "info"
 
 	# use proven config
@@ -173,6 +188,8 @@ compile_kernel()
 	else
 		eval ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} 'make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" oldconfig'
 		eval ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} 'make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" menuconfig'
+		# store kernel config in easily reachable place
+		cp .config $DEST/kernel.config
 	fi
 
 	eval CCACHE_BASEDIR="$(pwd)" ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} \
@@ -332,8 +349,7 @@ process_patch_file()
 	local description=$2
 
 	# detect and remove files which patch will create
-	LANGUAGE=english patch --batch --dry-run -p1 -N < $patch | grep create \
-		| awk '{print $NF}' | sed -n 's/,//p' | xargs -I % sh -c 'rm %'
+	lsdiff -s --strip=1 $patch | grep '^+' | awk '{print $2}' | xargs -I % sh -c 'rm -f %'
 
 	# main patch command
 	echo "Processing file $patch" >> $DEST/debug/patching.log
@@ -381,19 +397,19 @@ customize_image()
 {
 	# for users that need to prepare files at host
 	[[ -f $SRC/userpatches/customize-image-host.sh ]] && source $SRC/userpatches/customize-image-host.sh
-	cp $SRC/userpatches/customize-image.sh $CACHEDIR/sdcard/tmp/customize-image.sh
-	chmod +x $CACHEDIR/sdcard/tmp/customize-image.sh
-	mkdir -p $CACHEDIR/sdcard/tmp/overlay
+	cp $SRC/userpatches/customize-image.sh $CACHEDIR/$SDCARD/tmp/customize-image.sh
+	chmod +x $CACHEDIR/$SDCARD/tmp/customize-image.sh
+	mkdir -p $CACHEDIR/$SDCARD/tmp/overlay
 	if [[ $(lsb_release -sc) == xenial ]]; then
 		# util-linux >= 2.27 required
-		mount -o bind,ro $SRC/userpatches/overlay $CACHEDIR/sdcard/tmp/overlay
+		mount -o bind,ro $SRC/userpatches/overlay $CACHEDIR/$SDCARD/tmp/overlay
 	else
-		mount -o bind $SRC/userpatches/overlay $CACHEDIR/sdcard/tmp/overlay
+		mount -o bind $SRC/userpatches/overlay $CACHEDIR/$SDCARD/tmp/overlay
 	fi
 	display_alert "Calling image customization script" "customize-image.sh" "info"
-	chroot $CACHEDIR/sdcard /bin/bash -c "/tmp/customize-image.sh $RELEASE $FAMILY $BOARD $BUILD_DESKTOP"
-	umount $CACHEDIR/sdcard/tmp/overlay
-	mountpoint -q $CACHEDIR/sdcard/tmp/overlay || rm -r $CACHEDIR/sdcard/tmp/overlay
+	chroot $CACHEDIR/$SDCARD /bin/bash -c "/tmp/customize-image.sh $RELEASE $FAMILY $BOARD $BUILD_DESKTOP"
+	umount $CACHEDIR/$SDCARD/tmp/overlay
+	mountpoint -q $CACHEDIR/$SDCARD/tmp/overlay || rm -r $CACHEDIR/$SDCARD/tmp/overlay
 }
 
 userpatch_create()
@@ -424,10 +440,11 @@ userpatch_create()
 	for i in {3..1..1}; do echo -n "$i." && sleep 1; done
 }
 
-# overlayfs_wrapper <operation> <workdir>
+# overlayfs_wrapper <operation> <workdir> <description>
 #
 # <operation>: wrap|cleanup
 # <workdir>: path to source directory
+# <description>: suffix for merged directory to help locating it in /tmp
 # return value: new directory
 #
 # Assumptions/notes:
@@ -439,27 +456,26 @@ userpatch_create()
 #
 overlayfs_wrapper()
 {
-	if [[ $USE_OVERLAYFS != yes && -n $2 ]]; then
-		echo "$2"
-		return
-	fi
 	local operation="$1"
 	if [[ $operation == wrap ]]; then
 		local srcdir="$2"
-		local tempdir=$(mktemp -d)
-		local workdir=$(mktemp -d)
-		local mergeddir=$(mktemp -d)
+		local description="$3"
+		mkdir -p /tmp/overlay_components/ /tmp/armbian_build/
+		local tempdir=$(mktemp -d --tmpdir="/tmp/overlay_components/")
+		local workdir=$(mktemp -d --tmpdir="/tmp/overlay_components/")
+		local mergeddir=$(mktemp -d --suffix="_$description" --tmpdir="/tmp/armbian_build/")
 		mount -t overlay overlay -o lowerdir="$srcdir",upperdir="$tempdir",workdir="$workdir" "$mergeddir"
 		# this is executed in a subshell, so use temp files to pass extra data outside
 		echo "$tempdir" >> /tmp/.overlayfs_wrapper_cleanup
 		echo "$mergeddir" >> /tmp/.overlayfs_wrapper_umount
+		echo "$mergeddir" >> /tmp/.overlayfs_wrapper_cleanup
 		echo "$mergeddir"
 		return
 	fi
 	if [[ $operation == cleanup ]]; then
 		if [[ -f /tmp/.overlayfs_wrapper_umount ]]; then
 			for dir in $(</tmp/.overlayfs_wrapper_umount); do
-				[[ $dir == /tmp/* ]] && umount "$dir"
+				[[ $dir == /tmp/* ]] && umount -l "$dir" > /dev/null 2>&1
 			done
 		fi
 		if [[ -f /tmp/.overlayfs_wrapper_cleanup ]]; then
