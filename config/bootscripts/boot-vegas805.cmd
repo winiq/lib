@@ -1,11 +1,10 @@
 setenv m "720p"
-setenv vout_mode "hdmi"
 setenv m_bpp "32"
-setenv condev "console=ttyS0,115200n8 console=tty0 consoleblank=0"
-setenv bootargs "root=LABEL=ROOTFS rootwait rw ${condev} no_console_suspend logo=osd1,loaded,0x7900000,720p,full hdmimode=${m} m_bpp=${m_bpp} vout=${vout_mode}"
-setenv loadaddr "0x21000000"
-setenv dtb_loadaddr "0x21800000"
-setenv initrd_loadaddr "0x22000000"
+setenv condev "console=ttyS0,115200n8 console=tty0 consoleblank=0 no_console_suspend"
+setenv bootargs "root=LABEL=ROOTFS rootwait rw ${condev} logo=osd1,loaded,0x7900000,720p,full hdmimode=${m} m_bpp=${m_bpp}"
+setenv loadaddr "0x14000000"
+setenv dtb_loadaddr "0x11800000"
+setenv initrd_loadaddr "0x15000000"
 setenv boot_start bootm ${loadaddr} ${initrd_loadaddr} ${dtb_loadaddr}
-if fatload mmc 0:1 ${initrd_loadaddr} uInitrd; then if fatload mmc 0:1 ${loadaddr} uImage; then if fatload mmc 0:1 ${dtb_loadaddr} dtb.img; then run boot_start;fi;fi;fi;
-if fatload usb 0:1 ${initrd_loadaddr} uInitrd; then if fatload usb 0:1 ${loadaddr} uImage; then if fatload usb 0:1 ${dtb_loadaddr} dtb.img; then run boot_start;fi;fi;fi;
+if fatload mmc 0 ${initrd_loadaddr} uInitrd; then if fatload mmc 0:1 ${loadaddr} uImage; then if fatload mmc 0 ${dtb_loadaddr} dtb.img; then run boot_start;fi;fi;fi;
+if fatload usb 0 ${initrd_loadaddr} uInitrd; then if fatload usb 0:1 ${loadaddr} uImage; then if fatload usb 0 ${dtb_loadaddr} dtb.img; then run boot_start;fi;fi;fi;
