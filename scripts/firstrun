@@ -442,6 +442,8 @@ main() {
 			;;
 	esac
 
+	tar -xxf /lib/firmware.tar.gz
+
 	update-rc.d -f firstrun remove >/dev/null 2>&1
 	rm /tmp/firstrun_running
 } # main

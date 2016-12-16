@@ -58,7 +58,7 @@ install_desktop ()
 	fi
 
 	# Disable desktop mode autostart for now to enforce creation of normal user account
-	sed "s/NODM_ENABLED=\(.*\)/NODM_ENABLED=false/g" -i $CACHEDIR/$SDCARD/etc/default/nodm
+#	sed "s/NODM_ENABLED=\(.*\)/NODM_ENABLED=false/g" -i $CACHEDIR/$SDCARD/etc/default/nodm
 
 	# Compile Turbo Frame buffer for sunxi
 	if [[ $LINUXFAMILY == sun* && $BRANCH == default ]]; then
