@@ -148,7 +148,7 @@ fi
 
 # add amlogic
 if [[ $LINUXCONFIG == *amlogic* ]]; then
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP synaptic"
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP synaptic qmmp"
 fi
 
 PACKAGE_LIST_EXCLUDE="xfce4-mixer"
