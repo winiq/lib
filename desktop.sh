@@ -90,7 +90,6 @@ install_desktop ()
 		fi
 	fi
 
-	cp $SRC/lib/scripts/amlogic/Test3.mp4 $CACHEDIR/$SDCARD/etc/skel/Desktop/Test3.mp4
 	cp $SRC/lib/scripts/amlogic/Test.mp4 $CACHEDIR/$SDCARD/etc/skel/Desktop/Test.mp4
 	cp $SRC/lib/scripts/amlogic/autologin $CACHEDIR/$SDCARD/root/autologin
 

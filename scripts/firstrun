@@ -442,6 +442,9 @@ main() {
 			;;
 	esac
 
+	tar -xf /lib/firmware.tar.gz -C /lib
+	tar -xf /usr/lib/libmali.tar.gz -C /usr/lib
+
 	update-rc.d -f firstrun remove >/dev/null 2>&1
 	rm /tmp/firstrun_running
 } # main
