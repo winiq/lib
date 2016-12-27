@@ -6,25 +6,12 @@ mkdir -p /ddbr
 chmod 777 /ddbr
 
 IMAGE_KERNEL="/root/linux.img"
-IMAGE_DTB="/boot/dtb.img"
 PART_ROOT="/dev/data"
 DIR_INSTALL="/ddbr/install"
 
 if [ ! -f $IMAGE_KERNEL ] ; then
     echo "Not linux.img.  STOP install !!!"
     return
-fi
-
-if [ -e /dev/dtb ] ; then
-    echo "Backing device tree."
-    dd if="/dev/dtb" of="/ddbr/dtb.img" status=none && sync
-    echo "done."
-fi
-
-if [ -e /dev/recovery ] ; then
-    echo "Backing recovery partition."
-    dd if="/dev/recovery" of="/ddbr/recovery.img" bs=64K status=none && sync
-    echo "done."
 fi
 
 echo "Formatting DATA partition..."
@@ -103,12 +90,12 @@ echo "*******************************************"
 echo "Done copy ROOTFS"
 echo "*******************************************"
 
-echo -n "Writing kernel image..."
+echo "Writing kernel image..."
 dd if="$IMAGE_KERNEL" of="/dev/boot" bs=64K status=none && sync
 echo "done."
 
 if [ -f $IMAGE_DTB ] ; then
-    echo -n "Writing device tree image..."
+    echo "Writing device tree image..."
     dd if="$IMAGE_DTB" of="/dev/dtb" bs=262144 status=none && sync
     echo "done."
 fi
