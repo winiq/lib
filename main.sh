@@ -65,6 +65,12 @@ for i in "$@"; do
 	fi
 done
 
+if [[ $BETA == yes ]]; then
+	IMAGE_TYPE=nightly
+else
+	IMAGE_TYPE=stable
+fi
+
 if [[ $PROGRESS_DISPLAY == none ]]; then
 	OUTPUT_VERYSILENT=yes
 elif [[ $PROGRESS_DISPLAY != plain ]]; then
@@ -96,37 +102,67 @@ prepare_host
 # if KERNEL_ONLY, BOARD, BRANCH or RELEASE are not set, display selection menu
 
 if [[ -z $KERNEL_ONLY ]]; then
-	options+=("yes" "Kernel, u-boot and other packages")
-	options+=("no" "Full OS image for writing to SD card")
-	KERNEL_ONLY=$(dialog --stdout --title "Choose an option" --backtitle "$backtitle" --no-tags --menu "Select what to build" $TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
+	options+=("yes" "Kernel and u-boot packages")
+	options+=("no" "OS image for installation to SD card")
+	KERNEL_ONLY=$(dialog --stdout --title "Choose an option" --backtitle "$backtitle" --no-tags --menu "Select what to build" \
+		$TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
 	unset options
 	[[ -z $KERNEL_ONLY ]] && exit_with_error "No option selected"
 fi
 
+EXT='conf'
 if [[ -z $BOARD ]]; then
-	options=()
-	for board in $SRC/lib/config/boards/*.conf; do
-		options+=("$(basename $board | cut -d'.' -f1)" "$(head -1 $board | cut -d'#' -f2)")
+	WIP_STATE='supported'
+	WIP_BUTTON='WIP'
+	[[ -n $(find $SRC/lib/config/boards/ -name '*.wip' -print -quit) ]] && DIALOG_EXTRA="--extra-button"
+	while true; do
+		options=()
+		for board in $SRC/lib/config/boards/*.${EXT}; do
+			options+=("$(basename $board | cut -d'.' -f1)" "$(head -1 $board | cut -d'#' -f2)")
+		done
+		BOARD=$(dialog --stdout --title "Choose a board" --backtitle "$backtitle" --scrollbar --extra-label "Show $WIP_BUTTON" $DIALOG_EXTRA \
+			--menu "Select the target board\nDisplaying $WIP_STATE boards" $TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
+		STATUS=$?
+		if [[ $STATUS == 3 ]]; then
+			if [[ $WIP_STATE == supported ]]; then
+				WIP_STATE='work-in-progress'
+				EXT='wip'
+				WIP_BUTTON='supported'
+			else
+				WIP_STATE='supported'
+				EXT='conf'
+				WIP_BUTTON='WIP'
+			fi
+			continue
+		elif [[ $STATUS == 0 ]]; then
+			break
+		fi
+		unset options
+		[[ -z $BOARD ]] && exit_with_error "No board selected"
 	done
-	BOARD=$(dialog --stdout --title "Choose a board" --backtitle "$backtitle" --scrollbar --menu "Select one of supported boards" $TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
-	unset options
-	[[ -z $BOARD ]] && exit_with_error "No board selected"
 fi
 
-source $SRC/lib/config/boards/$BOARD.conf
+if [[ -f $SRC/lib/config/boards/${BOARD}.${EXT} ]]; then
+	source $SRC/lib/config/boards/${BOARD}.${EXT}
+elif [[ -f $SRC/lib/config/boards/${BOARD}.wip ]]; then
+	# when launching build for WIP board from command line
+	source $SRC/lib/config/boards/${BOARD}.wip
+fi
 
 [[ -z $KERNEL_TARGET ]] && exit_with_error "Board configuration does not define valid kernel config"
 
 if [[ -z $BRANCH ]]; then
 	options=()
-	[[ $KERNEL_TARGET == *default* ]] && options+=("default" "3.4.x - 3.14.x legacy")
-	[[ $KERNEL_TARGET == *next* ]] && options+=("next" "Latest stable @kernel.org")
-	[[ $KERNEL_TARGET == *dev* ]] && options+=("dev" "Latest dev @kernel.org")
+	[[ $KERNEL_TARGET == *default* ]] && options+=("default" "Vendor provided / legacy (3.4.x - 4.4.x)")
+	[[ $KERNEL_TARGET == *next* ]] && options+=("next"       "Mainline (@kernel.org)   (4.x)")
+	[[ $KERNEL_TARGET == *dev* ]] && options+=("dev"         "Development version      (4.x)")
 	# do not display selection dialog if only one kernel branch is available
 	if [[ "${#options[@]}" == 2 ]]; then
 		BRANCH="${options[0]}"
 	else
-		BRANCH=$(dialog --stdout --title "Choose a kernel" --backtitle "$backtitle" --menu "Select one of supported kernels" $TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
+		BRANCH=$(dialog --stdout --title "Choose a kernel" --backtitle "$backtitle" \
+			--menu "Select the target kernel branch\nExact kernel versions depend on selected board" \
+			$TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
 	fi
 	unset options
 	[[ -z $BRANCH ]] && exit_with_error "No kernel branch selected"
@@ -136,27 +172,25 @@ fi
 
 if [[ $KERNEL_ONLY != yes && -z $RELEASE ]]; then
 	options=()
-	options+=("wheezy" "Debian 7 Wheezy (oldstable)")
-	options+=("jessie" "Debian 8 Jessie (stable)")
-	options+=("trusty" "Ubuntu Trusty 14.04.x LTS")
-	options+=("xenial" "Ubuntu Xenial 16.04.x LTS")
-	RELEASE=$(dialog --stdout --title "Choose a release" --backtitle "$backtitle" --menu "Select one of the supported releases" $TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
+	options+=("jessie" "Debian 8 Jessie")
+	options+=("xenial" "Ubuntu Xenial 16.04 LTS")
+	RELEASE=$(dialog --stdout --title "Choose a release" --backtitle "$backtitle" --menu "Select the target OS release" \
+		$TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
 	unset options
 	[[ -z $RELEASE ]] && exit_with_error "No release selected"
 fi
 
-if [[ $KERNEL_ONLY != yes && -z $BUILD_DESKTOP && "jessie xenial" == *$RELEASE* ]]; then
+if [[ $KERNEL_ONLY != yes && -z $BUILD_DESKTOP ]]; then
 	options=()
-	options+=("no" "Image with console interface")
+	options+=("no" "Image with console interface (server)")
 	options+=("yes" "Image with desktop environment")
-	BUILD_DESKTOP=$(dialog --stdout --title "Choose image type" --backtitle "$backtitle" --no-tags --menu "Select image type" $TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
+	BUILD_DESKTOP=$(dialog --stdout --title "Choose image type" --backtitle "$backtitle" --no-tags --menu "Select the target image type" \
+		$TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
 	unset options
 	[[ -z $BUILD_DESKTOP ]] && exit_with_error "No option selected"
 fi
 
 source $SRC/lib/configuration.sh
-
-display_alert "Starting Armbian build script" "@host" "info"
 
 # sync clock
 if [[ $SYNC_CLOCK != no ]]; then
@@ -165,11 +199,10 @@ if [[ $SYNC_CLOCK != no ]]; then
 fi
 start=`date +%s`
 
-# fetch_from_repo <url> <dir> <ref> <subdir_flag>
-
 [[ $CLEAN_LEVEL == *sources* ]] && cleaning "sources"
 
 # ignore updates help on building all images - for internal purposes
+# fetch_from_repo <url> <dir> <ref> <subdir_flag>
 if [[ $IGNORE_UPDATES != yes ]]; then
 	display_alert "Downloading sources" "" "info"
 	fetch_from_repo "$BOOTSOURCE" "$BOOTDIR" "$BOOTBRANCH" "yes"
@@ -214,9 +247,11 @@ overlayfs_wrapper "cleanup"
 VER=$(dpkg --info $DEST/debs/${CHOSEN_KERNEL}_${REVISION}_${ARCH}.deb | grep Descr | awk '{print $(NF)}')
 VER="${VER/-$LINUXFAMILY/}"
 
+# create board support package
+# TODO: check and remove last part of the condition (! -d)
 [[ -n $RELEASE && ! -f $DEST/debs/$RELEASE/${CHOSEN_ROOTFS}_${REVISION}_${ARCH}.deb && ! -d $DEST/debs/$RELEASE/${CHOSEN_ROOTFS}_${REVISION}_${ARCH} ]] && create_board_package
 
-# chroot-buildpackages
+# build additional packages
 [[ $EXTERNAL_NEW == compile ]] && chroot_build_packages
 
 if [[ $KERNEL_ONLY != yes ]]; then
@@ -230,4 +265,3 @@ fi
 end=`date +%s`
 runtime=$(((end-start)/60))
 display_alert "Runtime" "$runtime min" "info"
-rm -f "/run/armbian/Armbian_${BOARD^}_${BRANCH}_${RELEASE}_$BUILD_DESKTOP.pid"

@@ -34,11 +34,6 @@
 cleaning()
 {
 	case $1 in
-		make)	# clean u-boot and kernel sources
-		[[ -d $SOURCES/$BOOTSOURCEDIR ]] && display_alert "Cleaning" "$BOOTSOURCEDIR" "info" && cd $SOURCES/$BOOTSOURCEDIR && eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} 'make clean CROSS_COMPILE="$CCACHE $UBOOT_COMPILER" >/dev/null 2>/dev/null'
-		[[ -d $SOURCES/$LINUXSOURCEDIR ]] && display_alert "Cleaning" "$LINUXSOURCEDIR" "info" && cd $SOURCES/$LINUXSOURCEDIR && eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} 'make clean CROSS_COMPILE="$CCACHE $UBOOT_COMPILER" >/dev/null 2>/dev/null'
-		;;
-
 		debs) # delete output/debs for current branch and family
 		if [[ -d $DEST/debs ]]; then
 			display_alert "Cleaning output/debs for" "$BOARD $BRANCH" "info"
@@ -96,6 +91,10 @@ exit_with_error()
 	display_alert "Process terminated" "" "info"
 	# TODO: execute run_after_build here?
 	overlayfs_wrapper "cleanup"
+	# unlock loop device access in case of starvation
+	exec {FD}>/var/lock/armbian-debootstrap-losetup
+	flock -u $FD
+
 	exit -1
 }
 
@@ -111,7 +110,7 @@ get_package_list_hash()
 
 # create_sources_list <release> <basedir>
 #
-# <release>: wheezy|jessie|trusty|xenial
+# <release>: jessie|xenial
 # <basedir>: path to root directory
 #
 create_sources_list()
@@ -121,7 +120,7 @@ create_sources_list()
 	[[ -z $basedir ]] && exit_with_error "No basedir passed to create_sources_list"
 
 	case $release in
-	wheezy|jessie)
+	jessie)
 	cat <<-EOF > $basedir/etc/apt/sources.list
 	deb http://${DEBIAN_MIRROR} $release main contrib non-free
 	#deb-src http://${DEBIAN_MIRROR} $release main contrib non-free
@@ -135,15 +134,9 @@ create_sources_list()
 	deb http://security.debian.org/ ${release}/updates main contrib non-free
 	#deb-src http://security.debian.org/ ${release}/updates main contrib non-free
 	EOF
-
-	cat <<-EOF > $basedir/etc/apt/preferences.d/90-backports.pref
-	#Package: *
-	#Pin: release n=${release}-backports
-	#Pin-Priority: 100
-	EOF
 	;;
 
-	trusty|xenial)
+	xenial)
 	cat <<-EOF > $basedir/etc/apt/sources.list
 	deb http://${UBUNTU_MIRROR} $release main restricted universe multiverse
 	#deb-src http://${UBUNTU_MIRROR} $release main restricted universe multiverse
@@ -156,12 +149,6 @@ create_sources_list()
 
 	deb http://${UBUNTU_MIRROR} ${release}-backports main restricted universe multiverse
 	#deb-src http://${UBUNTU_MIRROR} ${release}-backports main restricted universe multiverse
-	EOF
-
-	cat <<-EOF > $basedir/etc/apt/preferences.d/90-backports.pref
-	#Package: *
-	#Pin: release a=${release}-backports
-	#Pin-Priority: 100
 	EOF
 	;;
 	esac
@@ -208,6 +195,16 @@ fetch_from_repo()
 	fi
 	mkdir -p $SOURCES/$workdir
 	cd $SOURCES/$workdir
+
+	# check if existing remote URL for the repo or branch does not match current one
+	# may not be supported by older git versions
+	local current_url=$(git remote get-url origin 2>/dev/null)
+	if [[ -n $current_url && $(git rev-parse --is-inside-work-tree 2>/dev/null) == true && \
+				$(git rev-parse --show-toplevel) == $(pwd) && \
+				$current_url != $url ]]; then
+		display_alert "Remote URL does not match, removing existing local copy"
+		rm -rf .git *
+	fi
 
 	if [[ $(git rev-parse --is-inside-work-tree 2>/dev/null) != true || \
 				$(git rev-parse --show-toplevel) != $(pwd) ]]; then
@@ -356,7 +353,7 @@ addtorepo()
 # add all deb files to repository
 # parameter "remove" dumps all and creates new
 # function: cycle trough distributions
-	local distributions=("wheezy" "jessie" "trusty" "xenial")
+	local distributions=("jessie" "xenial")
 
 	for release in "${distributions[@]}"; do
 
@@ -477,7 +474,7 @@ prepare_host()
 	gawk gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabi qemu-user-static u-boot-tools uuid-dev zlib1g-dev unzip libusb-1.0-0-dev ntpdate \
 	parted pkg-config libncurses5-dev whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev \
 	nfs-kernel-server btrfs-tools gcc-aarch64-linux-gnu ncurses-term p7zip-full dos2unix dosfstools libc6-dev-armhf-cross libc6-dev-armel-cross \
-	libc6-dev-arm64-cross curl gcc-arm-none-eabi libnewlib-arm-none-eabi patchutils"
+	libc6-dev-arm64-cross curl gcc-arm-none-eabi libnewlib-arm-none-eabi patchutils python"
 
 	local codename=$(lsb_release -sc)
 	display_alert "Build host OS release" "${codename:-(unknown)}" "info"
@@ -545,8 +542,9 @@ prepare_host()
 		download_toolchain "https://releases.linaro.org/components/toolchain/binaries/4.9-2016.02/arm-linux-gnueabi/gcc-linaro-4.9-2016.02-x86_64_arm-linux-gnueabi.tar.xz"
 		download_toolchain "https://releases.linaro.org/components/toolchain/binaries/4.9-2016.02/arm-linux-gnueabihf/gcc-linaro-4.9-2016.02-x86_64_arm-linux-gnueabihf.tar.xz"
 		download_toolchain "https://releases.linaro.org/components/toolchain/binaries/5.2-2015.11-2/arm-linux-gnueabihf/gcc-linaro-5.2-2015.11-2-x86_64_arm-linux-gnueabihf.tar.xz"
-		download_toolchain "https://releases.linaro.org/archive/14.04/components/toolchain/binaries/gcc-linaro-arm-linux-gnueabihf-4.8-2014.04_linux.tar.xz"		
-		download_toolchain "https://releases.linaro.org/components/toolchain/binaries/6.1-2016.08/arm-linux-gnueabihf/gcc-linaro-6.1.1-2016.08-x86_64_arm-linux-gnueabihf.tar.xz"
+		download_toolchain "https://releases.linaro.org/archive/14.04/components/toolchain/binaries/gcc-linaro-arm-linux-gnueabihf-4.8-2014.04_linux.tar.xz"
+		download_toolchain "https://releases.linaro.org/components/toolchain/binaries/6.2-2016.11/arm-linux-gnueabihf/gcc-linaro-6.2.1-2016.11-x86_64_arm-linux-gnueabihf.tar.xz"
+		download_toolchain "https://releases.linaro.org/components/toolchain/binaries/6.2-2016.11/aarch64-linux-gnu/gcc-linaro-6.2.1-2016.11-x86_64_aarch64-linux-gnu.tar.xz"
 	fi
 
 	[[ ! -f $SRC/userpatches/customize-image.sh ]] && cp $SRC/lib/scripts/customize-image.sh.template $SRC/userpatches/customize-image.sh
