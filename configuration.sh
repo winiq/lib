@@ -39,17 +39,17 @@ else
 	MAINLINE_KERNEL_SOURCE='git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git'
 fi
 # allow upgrades for same major.minor versions
-ARMBIAN_MAINLINE_KERNEL_VERSION='4.8'
+ARMBIAN_MAINLINE_KERNEL_VERSION='4.9'
 MAINLINE_KERNEL_BRANCH=tag:v$(wget -qO- https://www.kernel.org/finger_banner | awk '{print $NF}' | grep -oE "^${ARMBIAN_MAINLINE_KERNEL_VERSION//./\\.}\.?[[:digit:]]*" | tail -1)
 MAINLINE_KERNEL_DIR='linux-vanilla'
 
 if [[ $USE_GITHUB_UBOOT_MIRROR == yes ]]; then
 	MAINLINE_UBOOT_SOURCE='https://github.com/RobertCNelson/u-boot'
-else	
+else
 	MAINLINE_UBOOT_SOURCE='git://git.denx.de/u-boot.git'
 fi
 #MAINLINE_UBOOT_BRANCH="v$(git ls-remote git://git.denx.de/u-boot.git | grep -v rc | grep -v '\^' | tail -1 | cut -d'v' -f 2)"
-MAINLINE_UBOOT_BRANCH='tag:v2016.11'
+MAINLINE_UBOOT_BRANCH='tag:v2017.01'
 MAINLINE_UBOOT_DIR='u-boot'
 
 # Let's set default data if not defined in board configuration above
@@ -63,8 +63,9 @@ SERIALCON=ttyS0
 BOOTSIZE=0
 
 # set unique mounting directory
-SDCARD="sdcard-${BRANCH}-${BOARD}-${RELEASE}"
-MOUNT="mount-${BRANCH}-${BOARD}-${RELEASE}"
+SDCARD="sdcard-${BRANCH}-${BOARD}-${RELEASE}-${BUILD_DESKTOP}"
+MOUNT="mount-${BRANCH}-${BOARD}-${RELEASE}-${BUILD_DESKTOP}"
+DESTIMG="image-${BRANCH}-${BOARD}-${RELEASE}-${BUILD_DESKTOP}"
 
 if [[ -f $SRC/lib/config/sources/$LINUXFAMILY.conf ]]; then
 	source $SRC/lib/config/sources/$LINUXFAMILY.conf
@@ -101,11 +102,10 @@ if [[ $LINUXFAMILY == sun*i && $BRANCH != default && ! ( $LINUXFAMILY == sun8i &
 	LINUXCONFIG="linux-sunxi-${BRANCH}"
 fi
 
-[[ $LINUXFAMILY == udoo && $BRANCH == default ]] && LINUXCONFIG="linux-$BOARD-default"
 [[ -z $LINUXCONFIG ]] && LINUXCONFIG="linux-${LINUXFAMILY}-${BRANCH}"
 
 # naming to distro
-if [[ $RELEASE == trusty || $RELEASE == xenial ]]; then DISTRIBUTION="Ubuntu"; else DISTRIBUTION="Debian"; fi
+if [[ $RELEASE == xenial ]]; then DISTRIBUTION="Ubuntu"; else DISTRIBUTION="Debian"; fi
 
 # temporary hacks/overrides
 case $LINUXFAMILY in
@@ -122,19 +122,19 @@ case $LINUXFAMILY in
 esac
 
 # Essential packages
-PACKAGE_LIST="bc bridge-utils build-essential cpufrequtils device-tree-compiler dosfstools figlet \
-	fbset fping ifenslave-2.6 iw lirc fake-hwclock wpasupplicant psmisc ntp parted rsync sudo curl \
-	dialog crda wireless-regdb ncurses-term python3-apt sysfsutils toilet u-boot-tools unattended-upgrades \
-	unzip usbutils wireless-tools console-setup console-common unicode-data openssh-server initramfs-tools \
-	ca-certificates linux-base mc abootimg"
+PACKAGE_LIST="bc bridge-utils build-essential cpufrequtils device-tree-compiler figlet fbset fping \
+	iw fake-hwclock wpasupplicant psmisc ntp parted rsync sudo curl linux-base dialog crda \
+	wireless-regdb ncurses-term python3-apt sysfsutils toilet u-boot-tools unattended-upgrades \
+	usbutils wireless-tools console-setup console-common unicode-data openssh-server initramfs-tools \
+	ca-certificates mc abootimg"
 
 # development related packages. remove when they are not needed for building packages in chroot
 PACKAGE_LIST="$PACKAGE_LIST automake libwrap0-dev libssl-dev libusb-dev libusb-1.0-0-dev libnl-3-dev libnl-genl-3-dev"
 
 # Non-essential packages
-PACKAGE_LIST_ADDITIONAL="alsa-utils btrfs-tools hddtemp iotop iozone3 stress sysbench screen ntfs-3g vim pciutils evtest htop pv lsof \
-	apt-transport-https libfuse2 libdigest-sha-perl libproc-processtable-perl aptitude dnsutils f3 haveged hdparm rfkill \
-	vlan sysstat bluez bluez-tools bash-completion hostapd git ethtool network-manager"
+PACKAGE_LIST_ADDITIONAL="alsa-utils btrfs-tools dosfstools hddtemp iotop iozone3 stress sysbench screen ntfs-3g vim pciutils \
+	evtest htop pv lsof apt-transport-https libfuse2 libdigest-sha-perl libproc-processtable-perl aptitude dnsutils f3 haveged \
+	hdparm rfkill vlan sysstat bluez bluez-tools bash-completion hostapd git ethtool network-manager unzip ifenslave-2.6 lirc"
 
 PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-fuse xfonts-base xinit x11-xserver-utils xfce4 lxtask xterm mirage thunar-volman galculator \
 	gtk2-engines gtk2-engines-murrine gtk2-engines-pixbuf libgtk2.0-bin gcj-jre-headless xfce4-screenshooter libgnome2-perl gksu bluetooth \
@@ -143,7 +143,7 @@ PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-f
 
 # add vega
 if [[ $LINUXCONFIG == *vegas* ]]; then
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP synaptic vlc"
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP synaptic"
 fi
 
 # add amlogic
@@ -155,16 +155,9 @@ PACKAGE_LIST_EXCLUDE="xfce4-mixer"
 
 # Release specific packages
 case $RELEASE in
-	wheezy)
-	PACKAGE_LIST_RELEASE="less makedev kbd acpid acpi-support-base iperf libudev1"
-	;;
 	jessie)
 	PACKAGE_LIST_RELEASE="less makedev kbd libpam-systemd iperf3 software-properties-common libnss-myhostname f2fs-tools"
 	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mozo pluma iceweasel libreoffice-writer libreoffice-style-tango libreoffice-gtk policykit-1 policykit-1-gnome eject"
-	;;
-	trusty)
-	PACKAGE_LIST_RELEASE="man-db wget nano software-properties-common iperf f2fs-tools acpid"
-	PACKAGE_LIST_EXCLUDE="$PACKAGE_LIST_EXCLUDE ureadahead plymouth"
 	;;
 	xenial)
 	PACKAGE_LIST_RELEASE="man-db wget nano libpam-systemd software-properties-common libnss-myhostname f2fs-tools iperf3"

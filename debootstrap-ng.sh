@@ -64,12 +64,10 @@ debootstrap_ng()
 	# install desktop files
 	[[ $BUILD_DESKTOP == yes ]] && install_desktop
 
-	if [[ $RELEASE == jessie || $RELEASE == xenial ]]; then
-		# install locally built packages
-		[[ $EXTERNAL_NEW == compile ]] && chroot_installpackages_local
-		# install from apt.armbian.com
-		[[ $EXTERNAL_NEW == prebuilt ]] && chroot_installpackages "yes"
-	fi
+	# install locally built packages
+	[[ $EXTERNAL_NEW == compile ]] && chroot_installpackages_local
+	# install from apt.armbian.com
+	[[ $EXTERNAL_NEW == prebuilt ]] && chroot_installpackages "yes"
 
 	# cleanup for install_kernel and install_board_specific
 	umount $CACHEDIR/$SDCARD/tmp/debs
@@ -134,8 +132,8 @@ create_rootfs_cache()
 			local apt_mirror="http://$APT_MIRROR"
 		fi
 
-		# fancy progress bars (except for Wheezy target)
-		[[ -z $OUTPUT_DIALOG && $RELEASE != wheezy ]] && local apt_extra_progress="--show-progress -o DPKG::Progress-Fancy=1"
+		# fancy progress bars
+		[[ -z $OUTPUT_DIALOG ]] && local apt_extra_progress="--show-progress -o DPKG::Progress-Fancy=1"
 
 		display_alert "Installing base system" "Stage 1/2" "info"
 		eval 'debootstrap --include=locales ${PACKAGE_LIST_EXCLUDE:+ --exclude=${PACKAGE_LIST_EXCLUDE// /,}} \
@@ -189,14 +187,8 @@ create_rootfs_cache()
 		create_sources_list "$RELEASE" "$CACHEDIR/$SDCARD/"
 
 		# stage: add armbian repository and install key
-		case $RELEASE in
-		wheezy|trusty)
-			echo "deb http://apt.armbian.com $RELEASE main" > $CACHEDIR/$SDCARD/etc/apt/sources.list.d/armbian.list
-		;;
-		jessie|xenial)
-			echo "deb http://apt.armbian.com $RELEASE main utils ${RELEASE}-desktop" > $CACHEDIR/$SDCARD/etc/apt/sources.list.d/armbian.list
-		;;
-		esac
+		echo "deb http://apt.armbian.com $RELEASE main utils ${RELEASE}-desktop" > $CACHEDIR/$SDCARD/etc/apt/sources.list.d/armbian.list
+
 		cp $SRC/lib/bin/armbian.key $CACHEDIR/$SDCARD
 		eval 'chroot $CACHEDIR/$SDCARD /bin/bash -c "cat armbian.key | apt-key add -"' \
 			${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
@@ -374,14 +366,22 @@ prepare_partitions()
 	fi
 
 	# stage: mount image
-	# TODO: Needs mknod here in Docker?
+	# lock access to loop devices
+	exec {FD}>/var/lock/armbian-debootstrap-losetup
+	flock --verbose -x $FD | tee -a $DEST/debug/output.log
+
 	LOOP=$(losetup -f)
 	[[ -z $LOOP ]] && exit_with_error "Unable to find free loop device"
 
 	# NOTE: losetup -P option is not available in Trusty
 	[[ $CONTAINER_COMPAT == yes && ! -e $LOOP ]] && mknod -m0660 $LOOP b 7 ${LOOP//\/dev\/loop} > /dev/null
 
+	# TODO: Needs mknod here in Docker?
 	losetup $LOOP $CACHEDIR/${SDCARD}.raw
+
+	# loop device was grabbed here, unlock
+	flock -u $FD
+
 	partprobe $LOOP
 
 	# stage: create fs, mount partitions, create fstab
@@ -391,7 +391,7 @@ prepare_partitions()
 		[[ $CONTAINER_COMPAT == yes ]] && mknod -m0660 ${LOOP}p${rootpart} b 259 $rootpart > /dev/null
 		mkfs.${mkfs[$ROOTFS_TYPE]} ${mkopts[$ROOTFS_TYPE]} ${LOOP}p${rootpart}
 		[[ $ROOTFS_TYPE == ext4 ]] && tune2fs -L ROOTFS -o journal_data_writeback ${LOOP}p${rootpart} > /dev/null
-		[[ $ROOTFS_TYPE == btrfs ]] && local fscreateopt="-o compress=zlib"
+		[[ $ROOTFS_TYPE == btrfs ]] && local fscreateopt="-o compress-force=zlib"
 		mount ${fscreateopt} ${LOOP}p${rootpart} $CACHEDIR/$MOUNT/
 		local rootfs="LABEL=ROOTFS"
 		echo "$rootfs / ${mkfs[$ROOTFS_TYPE]} defaults,noatime,nodiratime${mountopts[$ROOTFS_TYPE]} 0 1" >> $CACHEDIR/$SDCARD/etc/fstab
@@ -471,61 +471,13 @@ create_image()
 	[[ $BOOTSIZE != 0 ]] && umount -l $CACHEDIR/$MOUNT/boot
 	[[ $ROOTFS_TYPE != nfs ]] && umount -l $CACHEDIR/$MOUNT
 	losetup -d $LOOP
+	rm -rf --one-file-system $CACHEDIR/$DESTIMG $CACHEDIR/$MOUNT
+	mkdir -p $CACHEDIR/$DESTIMG
+	cp $CACHEDIR/$SDCARD/etc/armbian.txt $CACHEDIR/$DESTIMG
+	mv $CACHEDIR/${SDCARD}.raw $CACHEDIR/$DESTIMG/${version}.img
+	[[ $BUILD_ALL != yes ]] && cp $CACHEDIR/$DESTIMG/${version}.img $DEST/images/${version}.img
+	display_alert "Done building" "$DEST/images/${version}.img" "info"
 
-	if [[ $BUILD_ALL == yes ]]; then
-		TEMP_DIR="$(mktemp -d $CACHEDIR/${version}.XXXXXX)"
-		cp $CACHEDIR/$SDCARD/etc/armbian.txt "${TEMP_DIR}/"
-		mv "$CACHEDIR/${SDCARD}.raw" "${TEMP_DIR}/${version}.img"
-		cd "${TEMP_DIR}/"
-		sign_and_compress &
-	else
-		cp $CACHEDIR/$SDCARD/etc/armbian.txt $CACHEDIR/
-		mv $CACHEDIR/${SDCARD}.raw $CACHEDIR/${version}.img
-		cd $CACHEDIR/
-		sign_and_compress
-	fi
-} #############################################################################
-
-# sign_and_compress
-#
-# signs and compresses the image
-#
-sign_and_compress()
-{
-	# stage: compressing or copying image file
-	if [[ $COMPRESS_OUTPUTIMAGE != yes ]]; then
-		mv -f ${version}.img $DEST/images/${version}.img
-		display_alert "Done building" "$DEST/images/${version}.img" "info"
-	else
-		display_alert "Signing and compressing" "Please wait!" "info"
-		# stage: generate sha256sum.sha
-		sha256sum -b ${version}.img > sha256sum.sha
-		# stage: sign with PGP
-		if [[ -n $GPG_PASS ]]; then
-			echo $GPG_PASS | gpg --passphrase-fd 0 --armor --detach-sign --batch --yes ${version}.img
-			echo $GPG_PASS | gpg --passphrase-fd 0 --armor --detach-sign --batch --yes armbian.txt
-		fi
-		if [[ $SEVENZIP == yes ]]; then
-			local filename=$DEST/images/${version}.7z
-			if [[ $BUILD_ALL == yes ]]; then
-				nice -n 19 bash -c "7za a -t7z -bd -m0=lzma2 -mx=3 -mfb=64 -md=32m -ms=on $filename ${version}.img armbian.txt *.asc sha256sum.sha >/dev/null 2>&1 \
-				; [[ -n '$SEND_TO_SERVER' ]] && rsync -arP $filename -e 'ssh -p 22' $SEND_TO_SERVER"
-			else
-				7za a -t7z -bd -m0=lzma2 -mx=3 -mfb=64 -md=32m -ms=on $filename ${version}.img armbian.txt *.asc sha256sum.sha >/dev/null 2>&1
-				[[ -n $SEND_TO_SERVER ]] && rsync -arP $filename -e 'ssh -p 22' $SEND_TO_SERVER
-			fi
-		else
-			local filename=$DEST/images/${version}.zip
-			zip -FSq $filename ${version}.img armbian.txt *.asc sha256sum.sha
-		fi
-		rm -f ${version}.img *.asc armbian.txt sha256sum.sha
-		if [[ $BUILD_ALL == yes ]]; then
-			cd .. && rmdir "${TEMP_DIR}"
-		else
-			local filesize=$(ls -l --b=M $filename | cut -d " " -f5)
-			display_alert "Done building" "$filename [$filesize]" "info"
-		fi
-	fi
 } #############################################################################
 
 # mount_chroot <target>

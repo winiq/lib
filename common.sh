@@ -25,6 +25,12 @@
 
 compile_uboot()
 {
+	# not optimal, but extra cleaning before overlayfs_wrapper should keep sources directory clean
+	if [[ $CLEAN_LEVEL == *make* ]]; then
+		display_alert "Cleaning" "$BOOTSOURCEDIR" "info"
+		(cd $SOURCES/$BOOTSOURCEDIR; make clean > /dev/null 2>&1)
+	fi
+
 	if [[ $USE_OVERLAYFS == yes ]]; then
 		local ubootdir=$(overlayfs_wrapper "wrap" "$SOURCES/$BOOTSOURCEDIR" "u-boot_${LINUXFAMILY}_${BRANCH}")
 	else
@@ -32,51 +38,87 @@ compile_uboot()
 	fi
 	cd "$ubootdir"
 
-	[[ $FORCE_CHECKOUT == yes ]] && advanced_patch "u-boot" "$BOOTPATCHDIR" "$BOARD" "${LINUXFAMILY}-${BOARD}-${BRANCH}"
-
-	# create patch for manual source changes
-	[[ $CREATE_PATCHES == yes ]] && userpatch_create "u-boot"
-
 	# read uboot version
 	local version=$(grab_version "$ubootdir")
 
-	display_alert "Compiling uboot" "$version" "info"
-	# if requires specific toolchain, check if default is suitable
-	if [[ -n $UBOOT_NEEDS_GCC ]] && ! check_toolchain "UBOOT" "$UBOOT_NEEDS_GCC" ; then
-		# try to find suitable in $SRC/toolchains, exit if not found
-		find_toolchain "UBOOT" "$UBOOT_NEEDS_GCC" "UBOOT_TOOLCHAIN"
+	display_alert "Compiling u-boot" "$version" "info"
+
+	local toolchain=""
+	if [[ -n $UBOOT_ALT_GCC ]] && ! check_toolchain "$UBOOT_COMPILER" "$UBOOT_ALT_GCC"; then
+		# try to find alternative toolchain
+		toolchain=$(find_toolchain "$UBOOT_COMPILER" "$UBOOT_ALT_GCC")
 	fi
-	display_alert "Compiler version" "${UBOOT_COMPILER}gcc $(eval ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} ${UBOOT_COMPILER}gcc -dumpversion)" "info"
-
-	eval CCACHE_BASEDIR="$(pwd)" ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} \
-		'make $CTHREADS $BOOTCONFIG CROSS_COMPILE="$CCACHE $UBOOT_COMPILER"' 2>&1 \
-		${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
-		${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
-
-	[[ -f .config ]] && sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-armbian"/g' .config
-	[[ -f .config ]] && sed -i 's/CONFIG_LOCALVERSION_AUTO=.*/# CONFIG_LOCALVERSION_AUTO is not set/g' .config
-	[[ -f tools/logos/udoo.bmp ]] && cp $SRC/lib/bin/armbian-u-boot.bmp tools/logos/udoo.bmp
-	touch .scmversion
-
-	# patch mainline uboot configuration to boot with old kernels
-	if [[ $BRANCH == default && $LINUXFAMILY == sun*i ]] && ! grep -q "CONFIG_ARMV7_BOOT_SEC_DEFAULT=y" .config ; then
-		echo -e "CONFIG_ARMV7_BOOT_SEC_DEFAULT=y\nCONFIG_OLD_SUNXI_KERNEL_COMPAT=y" >> .config
+	if [[ -z $toolchain && -n $UBOOT_NEEDS_GCC ]] && ! check_toolchain "$UBOOT_COMPILER" "$UBOOT_NEEDS_GCC"; then
+		# try to find required toolchain if alt was not found
+		toolchain=$(find_toolchain "$UBOOT_COMPILER" "$UBOOT_NEEDS_GCC")
+		[[ -z $toolchain ]] && exit_with_error "Could not find required toolchain" "${compiler}gcc $expression"
 	fi
 
-	# $BOOTDELAY can be set in board family config, ensure autoboot can be stopped even if set to 0
-	[[ $BOOTDELAY == 0 ]] && echo -e "CONFIG_ZERO_BOOTDELAY_CHECK=y" >> .config
-	[[ -n $BOOTDELAY ]] && sed -i "s/^CONFIG_BOOTDELAY=.*/CONFIG_BOOTDELAY=${BOOTDELAY}/" .config || [[ -f .config ]] && echo "CONFIG_BOOTDELAY=${BOOTDELAY}" >> .config
+	display_alert "Compiler version" "${UBOOT_COMPILER}gcc $(eval ${toolchain:+env PATH=$toolchain:$PATH} ${UBOOT_COMPILER}gcc -dumpversion)" "info"
 
-	eval CCACHE_BASEDIR="$(pwd)" ${UBOOT_TOOLCHAIN:+env PATH=$UBOOT_TOOLCHAIN:$PATH} \
-		'make $UBOOT_TARGET $CTHREADS CROSS_COMPILE="$CCACHE $UBOOT_COMPILER"' 2>&1 \
-		${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
-		${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Compiling u-boot..." $TTY_Y $TTY_X'} \
-		${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
-
-	# create .deb package
+	# create directory structure for the .deb package
 	local uboot_name=${CHOSEN_UBOOT}_${REVISION}_${ARCH}
 	rm -rf $uboot_name
 	mkdir -p $uboot_name/usr/lib/{u-boot,$uboot_name} $uboot_name/DEBIAN
+
+	# process compilation for one or multiple targets
+	while read -r target; do
+		local target_make=$(cut -d';' -f1 <<< $target)
+		local target_patchdir=$(cut -d';' -f2 <<< $target)
+		local target_files=$(cut -d';' -f3 <<< $target)
+
+		display_alert "Checking out sources"
+		git checkout -f -q HEAD
+
+		if [[ $CLEAN_LEVEL == *make* ]]; then
+			display_alert "Cleaning" "$BOOTSOURCEDIR" "info"
+			(cd $SOURCES/$BOOTSOURCEDIR; make clean > /dev/null 2>&1)
+		fi
+
+		[[ $FORCE_CHECKOUT == yes ]] && advanced_patch "u-boot" "$BOOTPATCHDIR" "$BOARD" "$target_patchdir" "${LINUXFAMILY}-${BOARD}-${BRANCH}"
+
+		# create patch for manual source changes
+		[[ $CREATE_PATCHES == yes ]] && userpatch_create "u-boot"
+
+		eval CCACHE_BASEDIR="$(pwd)" ${toolchain:+env PATH=$toolchain:$PATH} \
+			'make $CTHREADS $BOOTCONFIG CROSS_COMPILE="$CCACHE $UBOOT_COMPILER"' 2>&1 \
+			${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
+			${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
+
+		[[ -f .config ]] && sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-armbian"/g' .config
+		[[ -f .config ]] && sed -i 's/CONFIG_LOCALVERSION_AUTO=.*/# CONFIG_LOCALVERSION_AUTO is not set/g' .config
+		[[ -f tools/logos/udoo.bmp ]] && cp $SRC/lib/bin/armbian-u-boot.bmp tools/logos/udoo.bmp
+		touch .scmversion
+
+		# patch mainline uboot configuration to boot with old sunxi kernels
+		if [[ $BRANCH == default && $LINUXFAMILY == sun*i ]] && ! grep -q "CONFIG_ARMV7_BOOT_SEC_DEFAULT=y" .config ; then
+			echo -e "CONFIG_ARMV7_BOOT_SEC_DEFAULT=y\nCONFIG_OLD_SUNXI_KERNEL_COMPAT=y" >> .config
+		fi
+
+		# $BOOTDELAY can be set in board family config, ensure autoboot can be stopped even if set to 0
+		[[ $BOOTDELAY == 0 ]] && echo -e "CONFIG_ZERO_BOOTDELAY_CHECK=y" >> .config
+		[[ -n $BOOTDELAY ]] && sed -i "s/^CONFIG_BOOTDELAY=.*/CONFIG_BOOTDELAY=${BOOTDELAY}/" .config || [[ -f .config ]] && echo "CONFIG_BOOTDELAY=${BOOTDELAY}" >> .config
+
+		eval CCACHE_BASEDIR="$(pwd)" ${toolchain:+env PATH=$toolchain:$PATH} \
+			'make $target_make $CTHREADS CROSS_COMPILE="$CCACHE $UBOOT_COMPILER"' 2>&1 \
+			${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
+			${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Compiling u-boot..." $TTY_Y $TTY_X'} \
+			${OUTPUT_VERYSILENT:+' >/dev/null 2>/dev/null'}
+
+		[[ ${PIPESTATUS[0]} -ne 0 ]] && exit_with_error "U-boot compilation failed"
+
+		# copy files to build directory
+		for f in $target_files; do
+			local f_src=$(cut -d':' -f1 <<< $f)
+			if [[ $f == *:* ]]; then
+				local f_dst=$(cut -d':' -f2 <<< $f)
+			else
+				local f_dst=$(basename $f_src)
+			fi
+			[[ ! -f $f_src ]] && exit_with_error "U-boot file not found" "$(basename $f_src)"
+			cp $f_src $uboot_name/usr/lib/$uboot_name/$f_dst
+		done
+	done <<< "$UBOOT_TARGET_MAP"
 
 	# set up postinstall script
 	cat <<-EOF > $uboot_name/DEBIAN/postinst
@@ -114,23 +156,27 @@ compile_uboot()
 	Description: Uboot loader $version
 	END
 
-	# copy files to build directory
-	for f in $UBOOT_FILES; do
-		[[ ! -f $f ]] && exit_with_error "U-boot file not found" "$(basename $f)"
-		cp $f $uboot_name/usr/lib/$uboot_name
-	done
+	# copy config file to the package
+	# useful for FEL boot with overlayfs_wrapper
+	[[ -f .config && -n $BOOTCONFIG ]] && cp .config $uboot_name/usr/lib/u-boot/$BOOTCONFIG
 
 	display_alert "Building deb" "${uboot_name}.deb" "info"
-	eval 'dpkg -b $uboot_name 2>&1' ${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'}
+	eval 'dpkg -b $uboot_name'
+# 2>&1' ${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'}
 	rm -rf $uboot_name
 
-	[[ ! -f ${uboot_name}.deb || $(stat -c '%s' "${uboot_name}.deb") -lt 5000 ]] && exit_with_error "Building u-boot failed"
+	[[ ! -f ${uboot_name}.deb || $(stat -c '%s' "${uboot_name}.deb") -lt 5000 ]] && exit_with_error "Building u-boot package failed"
 
 	mv ${uboot_name}.deb $DEST/debs/
 }
 
 compile_kernel()
 {
+	if [[ $CLEAN_LEVEL == *make* ]]; then
+		display_alert "Cleaning" "$LINUXSOURCEDIR" "info"
+		(cd $SOURCES/$LINUXSOURCEDIR; make ARCH=$ARCHITECTURE clean >/dev/null 2>&1)
+	fi
+
 	if [[ $USE_OVERLAYFS == yes ]]; then
 		local kerneldir=$(overlayfs_wrapper "wrap" "$SOURCES/$LINUXSOURCEDIR" "kernel_${LINUXFAMILY}_${BRANCH}")
 	else
@@ -145,7 +191,7 @@ compile_kernel()
 		[[ $FORCE_CHECKOUT == yes ]] && patch --batch --silent -t -p1 < $SRC/lib/patch/kernel/compiler.patch >> $DEST/debug/output.log 2>&1
 	fi
 
-	[[ $FORCE_CHECKOUT == yes ]] && advanced_patch "kernel" "$LINUXFAMILY-$BRANCH" "$BOARD" "$LINUXFAMILY-$BRANCH"
+	[[ $FORCE_CHECKOUT == yes ]] && advanced_patch "kernel" "$LINUXFAMILY-$BRANCH" "$BOARD" "" "$LINUXFAMILY-$BRANCH"
 
 	# create patch for manual source changes in debug mode
 	[[ $CREATE_PATCHES == yes ]] && userpatch_create "kernel"
@@ -154,12 +200,19 @@ compile_kernel()
 	local version=$(grab_version "$kerneldir")
 
 	display_alert "Compiling $BRANCH kernel" "$version" "info"
-	# if requires specific toolchain, check if default is suitable
-	if [[ -n $KERNEL_NEEDS_GCC ]] && ! check_toolchain "$KERNEL" "$KERNEL_NEEDS_GCC" ; then
-		# try to find suitable in $SRC/toolchains, exit if not found
-		find_toolchain "KERNEL" "$KERNEL_NEEDS_GCC" "KERNEL_TOOLCHAIN"
+
+	local toolchain=""
+	if [[ -n $KERNEL_ALT_GCC ]] && ! check_toolchain "$KERNEL_COMPILER" "$KERNEL_ALT_GCC"; then
+		# try to find alternative toolchain
+		toolchain=$(find_toolchain "$KERNEL_COMPILER" "$KERNEL_ALT_GCC")
 	fi
-	display_alert "Compiler version" "${KERNEL_COMPILER}gcc $(eval ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} ${KERNEL_COMPILER}gcc -dumpversion)" "info"
+	if [[ -z $toolchain && -n $KERNEL_NEEDS_GCC ]] && ! check_toolchain "$KERNEL_COMPILER" "$KERNEL_NEEDS_GCC"; then
+		# try to find required toolchain if alt was not found
+		toolchain=$(find_toolchain "$KERNEL_COMPILER" "$KERNEL_NEEDS_GCC")
+		[[ -z $toolchain ]] && exit_with_error "Could not find required toolchain" "${KERNEL_COMPILER}gcc $expression"
+	fi
+
+	display_alert "Compiler version" "${KERNEL_COMPILER}gcc $(eval ${toolchain:+env PATH=$toolchain:$PATH} ${KERNEL_COMPILER}gcc -dumpversion)" "info"
 
 	# use proven config
 	if [[ $KERNEL_KEEP_CONFIG != yes || ! -f .config ]]; then
@@ -181,18 +234,18 @@ compile_kernel()
 
 	if [[ $KERNEL_CONFIGURE != yes ]]; then
 		if [[ $BRANCH == default ]]; then
-			eval ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} 'make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" silentoldconfig'
+			make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" silentoldconfig
 		else
-			eval ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} 'make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" olddefconfig'
+			make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" olddefconfig
 		fi
 	else
-		eval ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} 'make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" oldconfig'
-		eval ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} 'make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" menuconfig'
+		make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" oldconfig
+		make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" menuconfig
 		# store kernel config in easily reachable place
 		cp .config $DEST/kernel.config
 	fi
 
-	eval CCACHE_BASEDIR="$(pwd)" ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} \
+	eval CCACHE_BASEDIR="$(pwd)" ${toolchain:+env PATH=$toolchain:$PATH} \
 		'make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" $KERNEL_IMAGE_TYPE modules dtbs 2>&1' \
 		${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
 		${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Compiling kernel..." $TTY_Y $TTY_X'} \
@@ -210,7 +263,7 @@ compile_kernel()
 	fi
 
 	# produce deb packages: image, headers, firmware, dtb
-	eval CCACHE_BASEDIR="$(pwd)" ${KERNEL_TOOLCHAIN:+env PATH=$KERNEL_TOOLCHAIN:$PATH} \
+	eval CCACHE_BASEDIR="$(pwd)" ${toolchain:+env PATH=$toolchain:$PATH} \
 		'make -j1 $KERNEL_PACKING KDEB_PKGVERSION=$REVISION LOCALVERSION="-"$LINUXFAMILY \
 		KBUILD_DEBARCH=$ARCH ARCH=$ARCHITECTURE DEBFULLNAME="$MAINTAINER" DEBEMAIL="$MAINTAINERMAIL" CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" 2>&1' \
 		${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
@@ -242,28 +295,23 @@ compile_sunxi_tools()
 # <expression>: "< x.y"; "> x.y"; "== x.y"
 check_toolchain()
 {
-	local target=$1
+	local compiler=$1
 	local expression=$2
-	local compiler_type="${target}_COMPILER"
-	local compiler="${!compiler_type}"
 	# get major.minor gcc version
 	local gcc_ver=$(${compiler}gcc -dumpversion | grep -oE "^[[:digit:]].[[:digit:]]")
 	awk "BEGIN{exit ! ($gcc_ver $expression)}" && return 0
 	return 1
 }
 
-# find_toolchain <UBOOT|KERNEL> <expression> <var_name>
+# find_toolchain <compiler_prefix> <expression>
 #
-# writes path to toolchain that satisfies <expression> to <var_name>
+# returns path to toolchain that satisfies <expression>
 #
 find_toolchain()
 {
-	local target=$1
+	local compiler=$1
 	local expression=$2
-	local var_name=$3
 	local dist=10
-	local compiler_type="${target}_COMPILER"
-	local compiler="${!compiler_type}"
 	local toolchain=""
 	# extract target major.minor version from expression
 	local target_ver=$(grep -oE "[[:digit:]].[[:digit:]]" <<< "$expression")
@@ -273,50 +321,60 @@ find_toolchain()
 		# get toolchain major.minor version
 		local gcc_ver=$(${dir}bin/${compiler}gcc -dumpversion | grep -oE "^[[:digit:]].[[:digit:]]")
 		# check if toolchain version satisfies requirement
-		awk "BEGIN{exit ! ($gcc_ver $expression)}" || continue
+		awk "BEGIN{exit ! ($gcc_ver $expression)}" >/dev/null || continue
 		# check if found version is the closest to target
 		local d=$(awk '{x = $1 - $2}{printf "%.1f\n", (x > 0) ? x : -x}' <<< "$target_ver $gcc_ver")
-		if awk "BEGIN{exit ! ($d < $dist)}" ; then
+		if awk "BEGIN{exit ! ($d < $dist)}" >/dev/null ; then
 			dist=$d
 			toolchain=${dir}bin
 		fi
 	done
-	[[ -z $toolchain ]] && exit_with_error "Could not find required toolchain" "${compiler}gcc $expression"
-	eval $"$var_name"="$toolchain"
+	echo "$toolchain"
 }
 
-# advanced_patch <dest> <family> <device> <description>
+# advanced_patch <dest> <family> <board> <target> <description>
 #
 # parameters:
 # <dest>: u-boot, kernel
 # <family>: u-boot: u-boot, u-boot-neo; kernel: sun4i-default, sunxi-next, ...
-# <device>: cubieboard, cubieboard2, cubietruck, ...
+# <board>: cubieboard, cubieboard2, cubietruck, ...
+# <target>: optional subdirectory
 # <description>: additional description text
 #
 # priority:
-# $SRC/userpatches/<dest>/<family>/<device>
+# $SRC/userpatches/<dest>/<family>/target_<target>
+# $SRC/userpatches/<dest>/<family>/board_<board>
 # $SRC/userpatches/<dest>/<family>
-# $SRC/lib/patch/<dest>/<family>/<device>
+# $SRC/lib/patch/<dest>/<family>/target_<target>
+# $SRC/lib/patch/<dest>/<family>/board_<board>
 # $SRC/lib/patch/<dest>/<family>
 #
 advanced_patch()
 {
 	local dest=$1
 	local family=$2
-	local device=$3
-	local description=$4
+	local board=$3
+	local target=$4
+	local description=$5
 
 	display_alert "Started patching process for" "$dest $description" "info"
 	display_alert "Looking for user patches in" "userpatches/$dest/$family" "info"
 
 	local names=()
-	local dirs=("$SRC/userpatches/$dest/$family/$device" "$SRC/userpatches/$dest/$family" "$SRC/lib/patch/$dest/$family/$device" "$SRC/lib/patch/$dest/$family")
+	local dirs=(
+		"$SRC/userpatches/$dest/$family/target_${target}:[\e[33mu\e[0m][\e[34mt\e[0m]"
+		"$SRC/userpatches/$dest/$family/board_${board}:[\e[33mu\e[0m][\e[35mb\e[0m]"
+		"$SRC/userpatches/$dest/$family:[\e[33mu\e[0m][\e[32mc\e[0m]"
+		"$SRC/lib/patch/$dest/$family/target_${target}:[\e[32ml\e[0m][\e[34mt\e[0m]"
+		"$SRC/lib/patch/$dest/$family/board_${board}:[\e[32ml\e[0m][\e[35mb\e[0m]"
+		"$SRC/lib/patch/$dest/$family:[\e[32ml\e[0m][\e[32mc\e[0m]"
+		)
 
 	# required for "for" command
 	shopt -s nullglob dotglob
 	# get patch file names
 	for dir in "${dirs[@]}"; do
-		for patch in $dir/*.patch; do
+		for patch in ${dir%%:*}/*.patch; do
 			names+=($(basename $patch))
 		done
 	done
@@ -325,11 +383,11 @@ advanced_patch()
 	# apply patches
 	for name in "${names_s[@]}"; do
 		for dir in "${dirs[@]}"; do
-			if [[ -f $dir/$name ]]; then
-				if [[ -s $dir/$name ]]; then
-					process_patch_file "$dir/$name" "$description"
+			if [[ -f ${dir%%:*}/$name ]]; then
+				if [[ -s ${dir%%:*}/$name ]]; then
+					process_patch_file "${dir%%:*}/$name" "${dir##*:}"
 				else
-					display_alert "... $name" "skipped" "info"
+					display_alert "... ${dir##*:} $name" "skipped"
 				fi
 				break # next name
 			fi
@@ -341,25 +399,24 @@ advanced_patch()
 #
 # parameters:
 # <file>: path to patch file
-# <description>: additional description text
+# <status>: additional status text
 #
 process_patch_file()
 {
 	local patch=$1
-	local description=$2
+	local status=$2
 
 	# detect and remove files which patch will create
 	lsdiff -s --strip=1 $patch | grep '^+' | awk '{print $2}' | xargs -I % sh -c 'rm -f %'
 
-	# main patch command
 	echo "Processing file $patch" >> $DEST/debug/patching.log
 	patch --batch --silent -p1 -N < $patch >> $DEST/debug/patching.log 2>&1
 
 	if [[ $? -ne 0 ]]; then
-		display_alert "... $(basename $patch)" "failed" "wrn";
+		display_alert "... $status $(basename $patch)" "failed" "wrn"
 		[[ $EXIT_PATCHING_ERROR == yes ]] && exit_with_error "Aborting due to" "EXIT_PATCHING_ERROR"
 	else
-		display_alert "... $(basename $patch)" "succeeded" "info"
+		display_alert "... $status $(basename $patch)" "succeeded" "info"
 	fi
 	echo >> $DEST/debug/patching.log
 }
@@ -426,7 +483,7 @@ userpatch_create()
 	# prompt to alter source
 	display_alert "Make your changes in this directory:" "$(pwd)" "wrn"
 	display_alert "Press <Enter> after you are done" "waiting" "wrn"
-	read
+	read </dev/tty
 	tput cuu1
 	git add .
 	# create patch out of changes
