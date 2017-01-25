@@ -59,7 +59,7 @@ if [ "$-" != "${-#*i}" ]; then
 			echo "[Service]" >> /etc/systemd/system/getty@tty1.service.d/20-autologin.conf
 			echo "ExecStart=" >> /etc/systemd/system/getty@tty1.service.d/20-autologin.conf
 			echo "ExecStart=-/sbin/agetty --autologin "${RealUserName}" --noclear %I 38400 linux" >> /etc/systemd/system/getty@tty1.service.d/20-autologin.conf
-			echo 'slep 3' >> /home/${RealUserName}/.bashrc
+			echo 'sleep 3' >> /home/${RealUserName}/.bashrc
 			echo " " >> /home/${RealUserName}/.bashrc
 			echo '[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx' >> /home/${RealUserName}/.bashrc
 			echo -e "Sucesfuul setup Users. Reboot system.\n"

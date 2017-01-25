@@ -104,5 +104,5 @@ echo "Write env bootargs"
 /usr/sbin/fw_setenv initargs "root=/dev/data rootflags=data=writeback rw console=ttyS0,115200n8 console=tty0 no_console_suspend consoleblank=0 fsck.repair=yes net.ifnames=0 mac=\${mac}"
 
 echo "*******************************************"
-echo "Complit copy OS to eMMC parted DATA"
+echo "Complete copy OS to eMMC parted DATA"
 echo "*******************************************"
