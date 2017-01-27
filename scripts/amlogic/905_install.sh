@@ -8,6 +8,7 @@ chmod 777 /ddbr
 IMAGE_KERNEL="/root/linux.img"
 PART_ROOT="/dev/data"
 DIR_INSTALL="/ddbr/install"
+IMAGE_DTB="/boot/dtb.img"
 
 if [ ! -f $IMAGE_KERNEL ] ; then
     echo "Not linux.img.  STOP install !!!"
