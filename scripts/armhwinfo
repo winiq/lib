@@ -269,7 +269,7 @@ case $1 in
 	*stop*)
 		# set verbosity=1 only if set to 7 and /boot/.force-verbose doesn't exist.
 		if [ ! -f /boot/.force-verbose ]; then
-			[[ -f /boot/armbianEnv.txt ]] && sed -i "s/^verbosity=.*/verbosity=1/" /boot/armbianEnv.txt
+			[[ -f /boot/armbianEnv.txt ]] && sed -i "s/^verbosity=.*/verbosity=1/" /boot/armbianEnv.txt && sync
 			rm /boot/.verbose
 		fi
 		case ${LINUXFAMILY} in
@@ -282,10 +282,10 @@ case $1 in
 		# some kernel modules are known to crash the kernel on shutdown (an example
 		# is the mass storage gadget module at least on sun7i). We try to unload as
 		# much modules as possible to minimize such situations:
-		/sbin/modprobe -r $(cut -f1 -d' ' </proc/modules)
+		###/sbin/modprobe -r $(cut -f1 -d' ' </proc/modules)
 		# shutdown logging
-		echo -e "\n### shutdown:\n\n$(dmesg | tail -n 100)" >>/var/log/armhwinfo.log
-		sync
+		###echo -e "\n### shutdown:\n\n$(dmesg | tail -n 100)" >>/var/log/armhwinfo.log
+		###sync
 		;;
 esac
 
