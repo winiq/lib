@@ -190,6 +190,17 @@ if [[ $KERNEL_ONLY != yes && -z $BUILD_DESKTOP ]]; then
 	[[ -z $BUILD_DESKTOP ]] && exit_with_error "No option selected"
 fi
 
+# options DE
+if [[ $KERNEL_ONLY != yes && $BUILD_DESKTOP = yes ]]; then
+	options=()
+	options+=("xfce" "Image with desktop XFCE")
+	options+=("mate" "Image with desktop MATE")
+	BUILD_DESKTOP_DE=$(dialog --stdout --title "Choose DE type" --backtitle "$backtitle" --no-tags --menu "Select the DE for target image" \
+		$TTY_Y $TTY_X $(($TTY_Y - 8)) "${options[@]}")
+	unset options
+	[[ -z $BUILD_DESKTOP_DE ]] && exit_with_error "No option selected"
+fi
+
 source $SRC/lib/configuration.sh
 
 # sync clock

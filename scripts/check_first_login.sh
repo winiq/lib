@@ -59,10 +59,18 @@ if [ "$-" != "${-#*i}" ]; then
 			echo "[Service]" >> /etc/systemd/system/getty@tty1.service.d/20-autologin.conf
 			echo "ExecStart=" >> /etc/systemd/system/getty@tty1.service.d/20-autologin.conf
 			echo "ExecStart=-/sbin/agetty --autologin "${RealUserName}" --noclear %I 38400 linux" >> /etc/systemd/system/getty@tty1.service.d/20-autologin.conf
-			echo 'sleep 2' >> /home/${RealUserName}/.bashrc
+#			echo 'sleep 2' >> /home/${RealUserName}/.bashrc
 			echo " " >> /home/${RealUserName}/.bashrc
 			echo '[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx' >> /home/${RealUserName}/.bashrc
 			echo -e "Sucesfuul setup Users. Reboot system.\n"
+
+			touch /home/${RealUserName}/.xinitrc_example
+			echo '#exec mate-session' >> /home/${RealUserName}/.xinitrc_example
+			echo '#exec startxfce4' >> /home/${RealUserName}/.xinitrc_example
+			echo '#exec startlxde' >> /home/${RealUserName}/.xinitrc_example
+			echo '#exec startlxqt' >> /home/${RealUserName}/.xinitrc_example
+			echo '#exec icewm-session' >> /home/${RealUserName}/.xinitrc_example
+
 			sync
 			sleep 3
 			reboot
