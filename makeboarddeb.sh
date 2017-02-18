@@ -103,9 +103,7 @@ create_board_package()
 	mkdir -p $destination/etc/init.d
 	mkdir -p $destination/etc/default
 
-	install -m 755 $SRC/lib/scripts/resize2fs $destination/etc/init.d
-	install -m 755 $SRC/lib/scripts/firstrun  $destination/etc/init.d
-	install -m 755 $SRC/lib/scripts/armhwinfo $destination/etc/init.d
+	install -m 755 $SRC/lib/scripts/armhwinfo $destination/etc/init.d/
 
 	# configure MIN / MAX speed for cpufrequtils
 	mkdir -p $destination/etc/default
@@ -275,6 +273,14 @@ create_board_package()
 		cp $SRC/lib/config/mpv_sunxi.conf $destination/etc/mpv/mpv.conf
 		echo "export VDPAU_OSD=1" > $destination/etc/profile.d/90-vdpau.sh
 		chmod 755 $destination/etc/profile.d/90-vdpau.sh
+	fi
+	if [[ ( $LINUXFAMILY == sun50iw2 || $LINUXFAMILY == sun8i ) && $BRANCH == dev ]]; then
+		# add mpv config for x11 output - slow, but it works compared to no config at all
+		mkdir -p $destination/etc/mpv/
+		cat <<-EOF > $destination/etc/mpv/mpv.conf
+		# HW acceleration is not supported on this platform yet
+		vo=x11
+		EOF
 	fi
 
 	# add some summary to the image

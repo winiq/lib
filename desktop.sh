@@ -16,9 +16,16 @@ install_desktop ()
 	mkdir -p $CACHEDIR/$SDCARD/tmp/bin
 	mount --bind $SRC/lib/bin/ $CACHEDIR/$SDCARD/tmp/bin
 
+	if [[ $RELEASE == xenial ]]; then
+		# install optimized firefox configuration
+		cp $SRC/lib/config/firefox.conf $CACHEDIR/$SDCARD/etc/firefox/syspref.js
+	fi
+	# install dedicated startup icons
+	cp $SRC/lib/bin/icons/${RELEASE}.png $CACHEDIR/$SDCARD/usr/share/pixmaps
+
 	# install default desktop settings
-	chroot $CACHEDIR/$SDCARD /bin/bash -c "tar xfz /tmp/bin/$RELEASE-desktop.tgz -C /etc/skel/"
-	chroot $CACHEDIR/$SDCARD /bin/bash -c "tar xfz /tmp/bin/$RELEASE-desktop.tgz -C /root/"
+	cp -R $SRC/lib/config/desktop/. $CACHEDIR/$SDCARD/etc/skel
+	cp -R $SRC/lib/config/desktop/. $CACHEDIR/$SDCARD/root
 
 	# install wallpapers
 	d=$CACHEDIR/$SDCARD/usr/share/backgrounds/xfce/
@@ -26,13 +33,9 @@ install_desktop ()
 	mkdir -p $CACHEDIR/$SDCARD/etc/polkit-1/localauthority/50-local.d
 	cp $SRC/lib/config/polkit-jessie/*.pkla $CACHEDIR/$SDCARD/etc/polkit-1/localauthority/50-local.d/
 
-	# set default wallpaper
-	sed -i 's/\(backgrounds\/xfce\/*\)[^ ]*/\1armbian06-1430-very-dark-3840x2160.jpg\"\/>/' $CACHEDIR/$SDCARD/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
-	sed -i 's/\(backgrounds\/xfce\/*\)[^ ]*/\1armbian06-1430-very-dark-3840x2160.jpg\"\/>/' $CACHEDIR/$SDCARD/root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
-
 	# Install custom icons and theme
 	chroot $CACHEDIR/$SDCARD /bin/bash -c "dpkg -i /tmp/bin/vibrancy-colors_2.4-trusty-Noobslab.com_all.deb >/dev/null 2>&1"
-	chroot $CACHEDIR/$SDCARD /bin/bash -c "unzip -qq /tmp/bin/NumixHolo.zip -d /usr/share/themes"
+	# chroot $CACHEDIR/$SDCARD /bin/bash -c "unzip -qq /tmp/bin/NumixHolo.zip -d /usr/share/themes"
 
 	# Enable network manager
 	if [[ -f ${CACHEDIR}/$SDCARD/etc/NetworkManager/NetworkManager.conf ]]; then
@@ -55,19 +58,6 @@ install_desktop ()
 
 		sed 's/name="use_compositing" type="bool" value="true"/name="use_compositing" type="bool" value="false"/' -i $CACHEDIR/$SDCARD/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
 		sed 's/name="use_compositing" type="bool" value="true"/name="use_compositing" type="bool" value="false"/' -i $CACHEDIR/$SDCARD/root/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
-
-		# Set default audio-output to HDMI for desktop-images
-		cat <<-EOF >> $CACHEDIR/$SDCARD/etc/asound.conf
-		pcm.!default {
-		    type hw
-		    card 1
-		}
-
-		ctl.!default {
-		    type hw
-		    card 1
-		}
-		EOF
 
 		# enable memory reservations
 		if [[ -f $CACHEDIR/$SDCARD/boot/armbianEnv.txt ]]; then

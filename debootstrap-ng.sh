@@ -114,12 +114,12 @@ debootstrap_ng()
 create_rootfs_cache()
 {
 	local packages_hash=$(get_package_list_hash)
-	local cache_fname=$CACHEDIR/rootfs/${RELEASE}-ng-$ARCH.$packages_hash.tgz
-	local display_name=${RELEASE}-ng-$ARCH.${packages_hash:0:3}...${packages_hash:29}.tgz
+	local cache_fname=$CACHEDIR/rootfs/${RELEASE}-ng-$ARCH.$packages_hash.tar.lz4
+	local display_name=${RELEASE}-ng-$ARCH.${packages_hash:0:3}...${packages_hash:29}.tar.lz4
 	if [[ -f $cache_fname ]]; then
 		local date_diff=$(( ($(date +%s) - $(stat -c %Y $cache_fname)) / 86400 ))
 		display_alert "Extracting $display_name" "$date_diff days old" "info"
-		pv -p -b -r -c -N "$display_name" "$cache_fname" | pigz -dc | tar xp --xattrs -C $CACHEDIR/$SDCARD/
+		pv -p -b -r -c -N "$display_name" "$cache_fname" | lz4 -dc | tar xp --xattrs -C $CACHEDIR/$SDCARD/
 	else
 		display_alert "Creating new rootfs for" "$RELEASE" "info"
 
@@ -241,7 +241,7 @@ create_rootfs_cache()
 		umount_chroot "$CACHEDIR/$SDCARD"
 
 		tar cp --xattrs --directory=$CACHEDIR/$SDCARD/ --exclude='./dev/*' --exclude='./proc/*' --exclude='./run/*' --exclude='./tmp/*' \
-			--exclude='./sys/*' . | pv -p -b -r -s $(du -sb $CACHEDIR/$SDCARD/ | cut -f1) -N "$display_name" | pigz --fast > $cache_fname
+			--exclude='./sys/*' . | pv -p -b -r -s $(du -sb $CACHEDIR/$SDCARD/ | cut -f1) -N "$display_name" | lz4 -c > $cache_fname
 	fi
 	mount_chroot "$CACHEDIR/$SDCARD"
 } #############################################################################
@@ -368,7 +368,7 @@ prepare_partitions()
 	# stage: mount image
 	# lock access to loop devices
 	exec {FD}>/var/lock/armbian-debootstrap-losetup
-	flock --verbose -x $FD | tee -a $DEST/debug/output.log
+	flock -x $FD
 
 	LOOP=$(losetup -f)
 	[[ -z $LOOP ]] && exit_with_error "Unable to find free loop device"
@@ -435,7 +435,7 @@ prepare_partitions()
 create_image()
 {
 	# stage: create file name
-	local version="Armbian_${REVISION}_${BOARD^}_${DISTRIBUTION}_${RELEASE}_${VER/-$LINUXFAMILY/}"
+	local version="Armbian_${REVISION}_${BOARD^}_${DISTRIBUTION}_${RELEASE}_${BRANCH}_${VER/-$LINUXFAMILY/}"
 	[[ $BUILD_DESKTOP == yes ]] && version=${version}_desktop
 	[[ $ROOTFS_TYPE == nfs ]] && version=${version}_nfsboot
 
@@ -446,7 +446,7 @@ create_image()
 	else
 		display_alert "Creating rootfs archive" "rootfs.tgz" "info"
 		tar cp --xattrs --directory=$CACHEDIR/$SDCARD/ --exclude='./boot/*' --exclude='./dev/*' --exclude='./proc/*' --exclude='./run/*' --exclude='./tmp/*' \
-			--exclude='./sys/*' . | pv -p -b -r -s $(du -sb $CACHEDIR/$SDCARD/ | cut -f1) -N "rootfs.tgz" | pigz > $DEST/images/${version}-rootfs.tgz
+			--exclude='./sys/*' . | pv -p -b -r -s $(du -sb $CACHEDIR/$SDCARD/ | cut -f1) -N "rootfs.tgz" | gzip -c > $DEST/images/${version}-rootfs.tgz
 	fi
 
 	# stage: rsync /boot
@@ -475,7 +475,10 @@ create_image()
 	mkdir -p $CACHEDIR/$DESTIMG
 	cp $CACHEDIR/$SDCARD/etc/armbian.txt $CACHEDIR/$DESTIMG
 	mv $CACHEDIR/${SDCARD}.raw $CACHEDIR/$DESTIMG/${version}.img
-	[[ $BUILD_ALL != yes ]] && cp $CACHEDIR/$DESTIMG/${version}.img $DEST/images/${version}.img
+	if [[ $BUILD_ALL != yes ]]; then
+		mv $CACHEDIR/$DESTIMG/${version}.img $DEST/images/${version}.img
+		rm -rf $CACHEDIR/$DESTIMG
+	fi
 	display_alert "Done building" "$DEST/images/${version}.img" "info"
 
 } #############################################################################
