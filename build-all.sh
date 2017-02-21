@@ -25,13 +25,13 @@ done
 FORCEDRELEASE=$RELEASE
 
 # when we want to build from certain start
-from=0
+#from=147
+#stop=148
 
 rm -rf /run/armbian
 mkdir -p /run/armbian
 RELEASE_LIST=("xenial" "jessie")
 BRANCH_LIST=("default" "next" "dev")
-
 
 pack_upload ()
 {
@@ -39,7 +39,7 @@ pack_upload ()
 
 # stage: init
 display_alert "Signing and compressing" "Please wait!" "info"
-local version="Armbian_${REVISION}_${BOARD^}_${DISTRIBUTION}_${RELEASE}_${VER/-$LINUXFAMILY/}"
+local version="Armbian_${REVISION}_${BOARD^}_${DISTRIBUTION}_${RELEASE}_${BRANCH}_${VER/-$LINUXFAMILY/}"
 local subdir="archive"
 [[ $BUILD_DESKTOP == yes ]] && version=${version}_desktop
 [[ $BETA == yes ]] && local subdir=nightly
@@ -65,7 +65,6 @@ find . -type f -not -name '*.7z' -print0 | xargs -0 rm -- ; \
 while ! rsync -arP $CACHEDIR/$DESTIMG/. -e 'ssh -p 22' ${SEND_TO_SERVER}:/var/www/dl.armbian.com/${BOARD}/${subdir};do sleep 5;done; \
 rm -r $CACHEDIR/$DESTIMG" &
 }
-
 
 build_main ()
 {
@@ -206,7 +205,7 @@ for line in "${buildlist[@]}"; do
 	n=$[$n+1]
 	[[ -z $RELEASE ]] && RELEASE=$FORCEDRELEASE;
 	if [[ $from -le $n ]]; then
-
+		[[ -z $BUILD_DESKTOP ]] && BUILD_DESKTOP="no"
 		jobs=$(ls /run/armbian | wc -l)
 		if [[ $jobs -lt $MULTITHREAD ]]; then
 			display_alert "Building in the back $n / ${#buildlist[@]}" "Board: $BOARD Kernel:$BRANCH${RELEASE:+ Release: $RELEASE}${BUILD_DESKTOP:+ Desktop: $BUILD_DESKTOP}" "ext"
@@ -218,6 +217,7 @@ for line in "${buildlist[@]}"; do
 		fi
 
 	fi
+	if [[ -n $stop && $n -ge $stop ]]; then exit; fi
 done
 
 buildall_end=`date +%s`

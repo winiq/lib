@@ -1,14 +1,14 @@
 # Armbian
 
 Ubuntu and Debian images for ARM based single-board computers
-http://www.armbian.com
+https://www.armbian.com
 
 ## How to build my own image or kernel?
 
 Supported build environments:
 
 - [Ubuntu Xenial 16.04 x64](http://archive.ubuntu.com/ubuntu/dists/xenial-updates/main/installer-amd64/current/images/netboot/mini.iso) guest inside a [VirtualBox](https://www.virtualbox.org/wiki/Downloads) or other virtualization software,
-- [Ubuntu Xenial 16.04 x64](http://archive.ubuntu.com/ubuntu/dists/xenial-updates/main/installer-amd64/current/images/netboot/mini.iso) guest managed by [Vagrant](https://www.vagrantup.com/). This uses Virtualbox (as above) but does so in an easily repeatable way. Please check the [Armbian with Vargant README](https://github.com/igorpecovnik/lib/blob/master/README-Vagrant.md) for a quick start HOWTO,
+- [Ubuntu Xenial 16.04 x64](http://archive.ubuntu.com/ubuntu/dists/xenial-updates/main/installer-amd64/current/images/netboot/mini.iso) guest managed by [Vagrant](https://www.vagrantup.com/). This uses Virtualbox (as above) but does so in an easily repeatable way. Please check the [Armbian with Vagrant README](https://github.com/igorpecovnik/lib/blob/master/README-Vagrant.md) for a quick start HOWTO,
 - [Ubuntu Xenial 16.04 x64](http://archive.ubuntu.com/ubuntu/dists/xenial-updates/main/installer-amd64/current/images/netboot/mini.iso) inside a [Docker](https://www.docker.com/), [systemd-nspawn](https://www.freedesktop.org/software/systemd/man/systemd-nspawn.html) or other container environment [(example)](https://github.com/igorpecovnik/lib/pull/255#issuecomment-205045273). Building full OS images inside containers may not work, so this option is mostly for the kernel compilation,
 - [Ubuntu Xenial 16.04 x64](http://archive.ubuntu.com/ubuntu/dists/xenial-updates/main/installer-amd64/current/images/netboot/mini.iso) running natively on a dedicated PC or a server,
 - [Ubuntu Trusty 14.04 x64](http://archive.ubuntu.com/ubuntu/dists/trusty-updates/main/installer-amd64/current/images/netboot/mini.iso) may still be used for the kernel compilation but it is not recommended,
@@ -34,13 +34,17 @@ Edit `compile.sh` and set
 
 or pass this option as a command line parameter like
 
-    ./compile.sh KERNEL_CONFIGURE=yes
+	./compile.sh KERNEL_CONFIGURE=yes
 
 to display the kernel configuration menu during the compilation process
 
-More info:
+## Reporting issues
 
-- [Documentation](http://www.armbian.com/using-armbian-tools/)
-- [Prebuilt images](http://www.armbian.com/download/)
-- [Support forums](http://forum.armbian.com/ "Armbian support forum")
+Please read [this](https://github.com/igorpecovnik/lib/blob/master/.github/ISSUE_TEMPLATE.md) notice first before opening an issue.
+
+## More info:
+
+- [Documentation](https://docs.armbian.com/Developer-Guide_Build-Preparation/)
+- [Prebuilt images](https://www.armbian.com/download/)
+- [Support forums](https://forum.armbian.com/ "Armbian support forum")
 - [Project at Github](https://github.com/igorpecovnik/lib)

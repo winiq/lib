@@ -59,7 +59,7 @@ cleaning()
 		;;
 
 		cache) # delete output/cache
-		[[ -d $CACHEDIR ]] && display_alert "Cleaning" "output/cache" "info" && find $CACHEDIR/ -type f -delete
+		[[ -d $CACHEDIR ]] && display_alert "Cleaning" "output/cache/rootfs (all)" "info" && find $CACHEDIR/rootfs/ -type f -delete
 		;;
 
 		images) # delete output/images
@@ -68,6 +68,13 @@ cleaning()
 
 		sources) # delete output/sources and output/buildpkg
 		[[ -d $SOURCES ]] && display_alert "Cleaning" "sources" "info" && rm -rf $SOURCES/* $DEST/buildpkg/*
+		;;
+
+		oldcache)
+		if [[ -d $CACHEDIR/rootfs/ && $(ls -1 $CACHEDIR/rootfs/ | wc -l) -gt 6 ]]; then
+			display_alert "Cleaning" "output/cache/rootfs (old)" "info"
+			(cd $CACHEDIR/rootfs/; ls -t | sed -e "1,6d" | xargs -d '\n' rm -f)
+		fi
 		;;
 	esac
 }
@@ -110,7 +117,7 @@ get_package_list_hash()
 
 # create_sources_list <release> <basedir>
 #
-# <release>: jessie|xenial
+# <release>: jessie|stretch|xenial
 # <basedir>: path to root directory
 #
 create_sources_list()
@@ -120,7 +127,7 @@ create_sources_list()
 	[[ -z $basedir ]] && exit_with_error "No basedir passed to create_sources_list"
 
 	case $release in
-	jessie)
+	jessie|stretch)
 	cat <<-EOF > $basedir/etc/apt/sources.list
 	deb http://${DEBIAN_MIRROR} $release main contrib non-free
 	#deb-src http://${DEBIAN_MIRROR} $release main contrib non-free
@@ -470,11 +477,11 @@ prepare_host()
 	fi
 
 	# packages list for host
-	local hostdeps="wget ca-certificates device-tree-compiler pv bc lzop zip binfmt-support build-essential ccache debootstrap ntpdate pigz \
+	local hostdeps="wget ca-certificates device-tree-compiler pv bc lzop zip binfmt-support build-essential ccache debootstrap ntpdate \
 	gawk gcc-arm-linux-gnueabihf gcc-arm-linux-gnueabi qemu-user-static u-boot-tools uuid-dev zlib1g-dev unzip libusb-1.0-0-dev ntpdate \
 	parted pkg-config libncurses5-dev whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev \
 	nfs-kernel-server btrfs-tools gcc-aarch64-linux-gnu ncurses-term p7zip-full dos2unix dosfstools libc6-dev-armhf-cross libc6-dev-armel-cross \
-	libc6-dev-arm64-cross curl gcc-arm-none-eabi libnewlib-arm-none-eabi patchutils python"
+	libc6-dev-arm64-cross curl gcc-arm-none-eabi libnewlib-arm-none-eabi patchutils python liblz4-tool"
 
 	local codename=$(lsb_release -sc)
 	display_alert "Build host OS release" "${codename:-(unknown)}" "info"

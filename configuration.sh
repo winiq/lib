@@ -10,7 +10,7 @@
 #
 
 # common options
-REVISION="5.24$SUBREVISION" # all boards have same revision
+REVISION="5.26$SUBREVISION" # all boards have same revision
 ROOTPWD="1234" # Must be changed @first login
 MAINTAINER="Igor Pecovnik" # deb signature
 MAINTAINERMAIL="igor.pecovnik@****l.com" # deb signature
@@ -48,12 +48,10 @@ if [[ $USE_GITHUB_UBOOT_MIRROR == yes ]]; then
 else
 	MAINLINE_UBOOT_SOURCE='git://git.denx.de/u-boot.git'
 fi
-#MAINLINE_UBOOT_BRANCH="v$(git ls-remote git://git.denx.de/u-boot.git | grep -v rc | grep -v '\^' | tail -1 | cut -d'v' -f 2)"
 MAINLINE_UBOOT_BRANCH='tag:v2017.01'
 MAINLINE_UBOOT_DIR='u-boot'
 
 # Let's set default data if not defined in board configuration above
-
 OFFSET=1 # Bootloader space in MB (1 x 2048 = default)
 ARCH=armhf
 KERNEL_IMAGE_TYPE=zImage
@@ -67,11 +65,10 @@ SDCARD="sdcard-${BRANCH}-${BOARD}-${RELEASE}-${BUILD_DESKTOP}"
 MOUNT="mount-${BRANCH}-${BOARD}-${RELEASE}-${BUILD_DESKTOP}"
 DESTIMG="image-${BRANCH}-${BOARD}-${RELEASE}-${BUILD_DESKTOP}"
 
-if [[ -f $SRC/lib/config/sources/$LINUXFAMILY.conf ]]; then
-	source $SRC/lib/config/sources/$LINUXFAMILY.conf
-else
+[[ ! -f $SRC/lib/config/sources/$LINUXFAMILY.conf ]] && \
 	exit_with_error "Sources configuration not found" "$LINUXFAMILY"
-fi
+
+source $SRC/lib/config/sources/$LINUXFAMILY.conf
 
 if [[ -f $SRC/userpatches/sources/$LINUXFAMILY.conf ]]; then
 	display_alert "Adding user provided $LINUXFAMILY overrides"
@@ -98,13 +95,11 @@ esac
 
 # Here we want to use linux-sunxi-next and linux-sunxi-dev configs for sun*i
 # except for sun8i-dev which is separate from sunxi-dev
-if [[ $LINUXFAMILY == sun*i && $BRANCH != default && ! ( $LINUXFAMILY == sun8i && $BRANCH == dev ) ]]; then
+[[ $LINUXFAMILY == sun*i && $BRANCH != default && ! ( $LINUXFAMILY == sun8i && $BRANCH == dev ) ]] && \
 	LINUXCONFIG="linux-sunxi-${BRANCH}"
-fi
 
 [[ -z $LINUXCONFIG ]] && LINUXCONFIG="linux-${LINUXFAMILY}-${BRANCH}"
 
-# naming to distro
 if [[ $RELEASE == xenial ]]; then DISTRIBUTION="Ubuntu"; else DISTRIBUTION="Debian"; fi
 
 # temporary hacks/overrides
@@ -134,12 +129,14 @@ PACKAGE_LIST="$PACKAGE_LIST automake libwrap0-dev libssl-dev libusb-dev libusb-1
 # Non-essential packages
 PACKAGE_LIST_ADDITIONAL="alsa-utils btrfs-tools dosfstools hddtemp iotop iozone3 stress sysbench screen ntfs-3g vim pciutils \
 	evtest htop pv lsof apt-transport-https libfuse2 libdigest-sha-perl libproc-processtable-perl aptitude dnsutils f3 haveged \
-	hdparm rfkill vlan sysstat bluez bluez-tools bash-completion hostapd git ethtool network-manager unzip ifenslave-2.6 lirc"
+	hdparm rfkill vlan sysstat bluez bluez-tools bash-completion hostapd git ethtool network-manager unzip ifenslave lirc \
+	libpam-systemd iperf3 software-properties-common libnss-myhostname f2fs-tools"
 
 PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-fuse xfonts-base xinit x11-xserver-utils lxtask xterm mirage thunar-volman galculator \
 	gtk2-engines gtk2-engines-murrine gtk2-engines-pixbuf libgtk2.0-bin gcj-jre-headless libgnome2-perl gksu bluetooth \
 	network-manager-gnome gnome-keyring gcr libgck-1-0 libgcr-3-common p11-kit pasystray pavucontrol pulseaudio \
-	paman pavumeter pulseaudio-module-gconf pulseaudio-module-bluetooth blueman libpam-gnome-keyring libgl1-mesa-dri mpv gparted synaptic qmmp kazam"
+	paman pavumeter pulseaudio-module-gconf pulseaudio-module-bluetooth blueman libpam-gnome-keyring libgl1-mesa-dri mpv gparted synaptic qmmp kazam \
+	libreoffice-writer libreoffice-style-tango libreoffice-gtk policykit-1"
 
 # add amlogic
 #if [[ $LINUXCONFIG == *amlogic* ]]; then
@@ -161,13 +158,16 @@ PACKAGE_LIST_EXCLUDE="xfce4-mixer"
 # Release specific packages
 case $RELEASE in
 	jessie)
-	PACKAGE_LIST_RELEASE="less makedev kbd libpam-systemd iperf3 software-properties-common libnss-myhostname f2fs-tools"
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mozo pluma iceweasel libreoffice-writer libreoffice-style-tango libreoffice-gtk policykit-1 policykit-1-gnome eject"
+	PACKAGE_LIST_RELEASE="less kbd"
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mozo pluma iceweasel policykit-1-gnome eject"
 	;;
 	xenial)
-	PACKAGE_LIST_RELEASE="man-db wget nano libpam-systemd software-properties-common libnss-myhostname f2fs-tools iperf3"
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP libreoffice-writer libreoffice-style-tango libreoffice-gtk thunderbird firefox gnome-icon-theme-full tango-icon-theme \
-		policykit-1 language-selector-gnome paprefs"
+	PACKAGE_LIST_RELEASE="man-db wget nano linux-firmware"
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP thunderbird firefox gnome-icon-theme-full tango-icon-theme language-selector-gnome paprefs numix-gtk-theme"
+	[[ $ARCH == armhf ]] && PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mate-utils ubuntu-mate-welcome mate-settings-daemon"
+	;;
+	stretch)
+	PACKAGE_LIST_RELEASE="man-db less kbd"
 	;;
 esac
 
@@ -196,6 +196,7 @@ if [[ $ARCH == arm64 ]]; then
 	PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/firefox/firefox:armhf}"
 fi
 [[ $BUILD_DESKTOP == yes ]] && PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_DESKTOP"
+
 # debug
 cat <<-EOF >> $DEST/debug/output.log
 ## BUILD SCRIPT ENVIRONMENT
