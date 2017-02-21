@@ -181,6 +181,7 @@ if [[ $KERNEL_ONLY != yes && -z $RELEASE ]]; then
 fi
 
 if [[ $KERNEL_ONLY != yes && -z $BUILD_DESKTOP ]]; then
+	BUILD_DESKTOP_DE="server"
 	options=()
 	options+=("no" "Image with console interface (server)")
 	options+=("yes" "Image with desktop environment")
