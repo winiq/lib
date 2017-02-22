@@ -435,7 +435,7 @@ prepare_partitions()
 create_image()
 {
 	# stage: create file name
-	local version="Armbian_${REVISION}_${BOARD_NAME}_${BUILD_DESKTOP_DE}_${DISTRIBUTION}_${RELEASE}_${VER/-$LINUXFAMILY/}"
+	local version="Armbian_${REVISION}_${BOARD_NAME}_${DISTRIBUTION}_${RELEASE}_${VER/-$LINUXFAMILY/}_${BUILD_DESKTOP_DE}"
 #	[[ $BUILD_DESKTOP == yes ]] && version=${version}_desktop
 	[[ $ROOTFS_TYPE == nfs ]] && version=${version}_nfsboot
 
