@@ -10,10 +10,17 @@ PART_ROOT="/dev/data"
 DIR_INSTALL="/ddbr/install"
 IMAGE_DTB="/boot/dtb.img"
 
+
 if [ ! -f $IMAGE_KERNEL ] ; then
     echo "Not linux.img.  STOP install !!!"
     return
 fi
+
+echo "Create new linux.img"
+
+abootimg -x $IMAGE_KERNEL
+abootimg -u $IMAGE_KERNEL -k /boot/zImage
+abootimg -u $IMAGE_KERNEL -r /boot/uInitrd
 
 echo "Formatting DATA partition..."
 umount -f $PART_ROOT
