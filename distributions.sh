@@ -118,10 +118,10 @@ install_common()
 	#	chroot $CACHEDIR/$SDCARD /bin/bash -c "dpkg -i /tmp/debs/${CHOSEN_KERNEL/image/firmware-image}_${REVISION}_${ARCH}.deb" >> $DEST/debug/install.log 2>&1
 	#fi
 
-#	if [[ -f $CACHEDIR/$SDCARD/tmp/debs/armbian-firmware_${REVISION}_${ARCH}.deb ]]; then
-#		display_alert "Installing generic firmware" "armbian-firmware" "info"
-#		chroot $CACHEDIR/$SDCARD /bin/bash -c "dpkg -i /tmp/debs/armbian-firmware_${REVISION}_${ARCH}.deb" >> $DEST/debug/install.log 2>&1
-#	fi
+	if [[ -f $CACHEDIR/$SDCARD/tmp/debs/armbian-firmware-full_${REVISION}_${ARCH}.deb ]]; then
+		display_alert "Installing generic firmware" "armbian-firmware-full" "info"
+		chroot $CACHEDIR/$SDCARD /bin/bash -c "dpkg -i /tmp/debs/armbian-firmware-full_${REVISION}_${ARCH}.deb" >> $DEST/debug/install.log 2>&1
+	fi
 
 	if [[ -f $CACHEDIR/$SDCARD/tmp/debs/${CHOSEN_KERNEL/image/dtb}_${REVISION}_${ARCH}.deb ]]; then
 		display_alert "Installing DTB" "${CHOSEN_KERNEL/image/dtb}" "info"

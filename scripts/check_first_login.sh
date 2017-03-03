@@ -93,8 +93,8 @@ if [[ "$-" != "${-#*i}" ]]; then
 			echo '#exec startlxqt' >> /home/${RealUserName}/.xinitrc_example
 			echo '#exec icewm-session' >> /home/${RealUserName}/.xinitrc_example
 
-			tar -xf /lib/firmware.tar.gz -C /lib
-			tar -xf /usr/lib/libmali.tar.gz -C /usr/lib
+#			tar -xf /lib/firmware.tar.gz -C /lib
+#			tar -xf /usr/lib/libmali.tar.gz -C /usr/lib
 
 			sync
 			sleep 3
