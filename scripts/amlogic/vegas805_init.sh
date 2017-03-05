@@ -70,7 +70,7 @@ esac
 
 # Console unblack
 echo 0 > /sys/class/graphics/fb0/blank
-echo 0 > /sys/class/graphics/fb1/blank
+#echo 0 > /sys/class/graphics/fb1/blank
 
 # Move IRQ's of ethernet to CPU1/2
 #echo 1,2 > /proc/irq/40/smp_affinity_list
