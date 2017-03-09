@@ -12,16 +12,23 @@
 # Update: 6 Jan 2017 21:43:00 EET                                             #
 # Reason: Added functionality to restore images that this program creates.    #
 ###############################################################################
+# Update: 8 Mar 2017 18:30:00 EET                                             #
+# Reason: Changed yellow color to cyan for white backround terminals.         #
+###############################################################################
+# Update: 8 Mar 2017 18:52:00 EET                                             #
+# Reason: Changed backup/restore dir to /ddbr as installer excludes this dir. #
+###############################################################################
 _r=$(tput bold && tput setaf 1)
 _g=$(tput bold && tput setaf 2)
 _b=$(tput bold && tput setaf 4)
-_y=$(tput bold && tput setaf 3)
+_c=$(tput bold && tput setaf 6)
 _x=$(tput sgr0)
-OUTDIR="/root"
+[ ! -d /ddbr ] && mkdir -p /ddbr
+OUTDIR="/ddbr"
 dobackup(){
-echo $_y" DO YOU WANT COMPRESSION ? "$_x
+echo $_c" DO YOU WANT COMPRESSION ? "$_x
 while true
-read -p " "$_b"YES=("$_y"y"$_b") NO=("$_y"n"$_b")"$_x" " yn
+read -p " "$_b"YES=("$_c"y"$_b") NO=("$_c"n"$_b")"$_x" " yn
 do
 case $yn in
 y)
@@ -45,9 +52,9 @@ finish
 fi
 }
 dorestore(){
-echo $_y" DID YOU USED COMPRESSION WHEN YOU TOOK THE BACKUP ? "$_x
+echo $_c" DID YOU USED COMPRESSION WHEN YOU TOOK THE BACKUP ? "$_x
 while true
-read -p " "$_b"YES=("$_y"y"$_b") NO=("$_y"n"$_b")"$_x" " yn
+read -p " "$_b"YES=("$_c"y"$_b") NO=("$_c"n"$_b")"$_x" " yn
 do
 case $yn in
 y)
@@ -62,8 +69,8 @@ esac
 done
 if [ "$COMPRESS" = "TRUE" ];then
 [ ! -f $OUTDIR/$image.gz ] && echo "$_r NO IMAGE FOUND. MAKE SURE YOU HAVE MADE A BACKUP FIRST."$_x"" && exit 1
-echo "$_y YOU ARE ABOUT TO MAKE SERIOUS CHANGES TO YOUR SYSTEM!!!"
-echo " FILE "$_g"$OUTDIR/$image.gz"$_y" IS GOING TO BE WRITEN TO "$_g"$emmc"$_y" "
+echo "$_c YOU ARE ABOUT TO MAKE SERIOUS CHANGES TO YOUR SYSTEM!!!"
+echo " FILE "$_g"$OUTDIR/$image.gz"$_c" IS GOING TO BE WRITEN TO "$_g"$emmc"$_c" "
 echo " MAKE SURE EVERYTHING IS OK AND:"
 read -p " PRESS ENTER TO CONTINUE OR CTRL+C TO CANCEL $_x" blah
 echo $_b" RESTORING $OUTDIR/$image.gz TO /dev/$emmc | PLEASE WAIT..."$_x
@@ -72,8 +79,8 @@ gunzip -c $OUTDIR/$image.gz | pv -s $intsize"K" | dd of=/dev/$emmc
 finish
 else
 [ ! -f $OUTDIR/$image ] && echo "$_r NO IMAGE FOUND. MAKE SURE YOU HAVE MADE A BACKUP FIRST."$_x"" && exit 1
-echo "$_y YOU ARE ABOUT TO MAKE SERIOUS CHANGES TO YOUR SYSTEM!!!"
-echo " FILE "$_g"$OUTDIR/$image"$_y" IS GOING TO BE WRITEN TO "$_g"$emmc"$_y" "
+echo "$_c YOU ARE ABOUT TO MAKE SERIOUS CHANGES TO YOUR SYSTEM!!!"
+echo " FILE "$_g"$OUTDIR/$image"$_c" IS GOING TO BE WRITEN TO "$_g"$emmc"$_c" "
 echo " MAKE SURE EVERYTHING IS OK AND:"
 read -p " PRESS ENTER TO CONTINUE OR CTRL+C TO CANCEL $_x" blah
 echo $_b" RESTORING $OUTDIR/$image TO /dev/$emmc | PLEASE WAIT..."$_x
@@ -99,11 +106,11 @@ echo "$_b AVAILABLE DEVICES: "$_g"$(echo $avail)""$_x"
 echo "$_b YOU ARE RUNNING "$_g"$(lsb_release -c | awk '{print $2}')"$_b" FROM "$_g"$runfrom""$_x"
 echo -e "$_b INTERNAL EMMC IS: "$_g"$emmc"$_b" SIZE: "$_g"$intsize""$_x"
 echo -e "$_b ROOT ($runfrom) FREE SPACE IS:\t"$_g"$rootfree""$_x"
-[ $rootfree -le $intsize ] && echo "$_r NOT ENOUGH FREE SPACE!!! $_x" && exit 1
+[ $rootfree -le $intsize ] && echo "$_r SMALL FREE SPACE! $_x"
 [ $runfrom = $emmc ] && echo "$_r YOU ARE RUNNING ALREADY FROM EMMC!!! $_x" && exit 1
-echo "$_y DO YOU WANT TO BACKUP OR RESTORE ? "$_x""
+echo "$_c DO YOU WANT TO BACKUP OR RESTORE ? "$_x""
 while true
-read -p " "$_b"BACKUP=("$_y"b"$_b") RESTORE=("$_y"r"$_b")"$_x" " br
+read -p " "$_b"BACKUP=("$_c"b"$_b") RESTORE=("$_c"r"$_b")"$_x" " br
 do
 case $br in
 b)
