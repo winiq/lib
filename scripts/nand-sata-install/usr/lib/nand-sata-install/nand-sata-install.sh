@@ -30,11 +30,13 @@ title="NAND, eMMC, SATA and USB Armbian installer v""$VERSION"
 if cat /proc/cpuinfo | grep -q 'sun4i'; then DEVICE_TYPE="a10"; else DEVICE_TYPE="a20"; fi
 BOOTLOADER="${CWD}/${DEVICE_TYPE}/bootloader"
 
+#recognize_root
+root_partition=$(cat /proc/cmdline | sed -e 's/^.*root=//' -e 's/ .*$//')
+root_partition_device=$(blkid |  tr -d '":' | grep $( cat /proc/cmdline | sed -e 's/^.*root=//' -e 's/ .*$//') |  awk '{print $1}'| rev | cut -c3- | rev)
+
 # find targets: NAND, EMMC, SATA
-nandcheck=$(ls -l /dev/ | grep -w 'nand' | awk '{print $NF}');
-[[ -n $nandcheck ]] && nandcheck="/dev/$nandcheck"
-emmccheck=$(ls -l /dev/ | grep -w 'mmcblk[1-9]' | awk '{print $NF}');
-[[ -n $emmccheck ]] && emmccheck="/dev/$emmccheck"
+nandcheck=$(ls -d -1 /dev/nand* | grep -w 'nand' | awk '{print $NF}');
+emmccheck=$(ls -d -1 /dev/mmcblk* | grep -w 'mmcblk[0-9]' | grep -v "$root_partition_device");
 satacheck=$(cat /proc/partitions | grep  'sd' | awk '{print $NF}')
 
 # define makefs and mount options
@@ -72,7 +74,7 @@ create_armbian()
 
 	# SD card boot part
 	# UUID=xxx...
-	sduuid=$(blkid -o export /dev/mmcblk0p1 | grep -w UUID)
+	sduuid=$(blkid -o export /dev/mmcblk*p1 | grep -w UUID | grep -v "$root_partition_device")
 
 	# calculate usage and see if it fits on destination
 	USAGE=$(df -BM | grep ^/dev | head -1 | awk '{print $3}' | tr -cd '[0-9]. \n')
@@ -220,13 +222,17 @@ create_armbian()
 		[[ -f /boot/boot.ini ]] && sed -e 's,root='"$root_partition"',root='"$satauuid"',g' -i /boot/boot.ini
 		# new boot scripts
 		if [[ -f /boot/armbianEnv.txt ]]; then
-			sed -e 's,rootdev=.*,rootdev='"$satauuid"',g' -i  /boot/armbianEnv.txt
-			sed -e 's,rootfstype=.*,rootfstype='$choosen_fs',g' -i /boot/armbianEnv.txt
+			sed -e 's,rootdev=.*,rootdev='"$satauuid"',g' -i /boot/armbianEnv.txt
+			grep -q '^rootdev' /boot/armbianEnv.txt || echo "rootdev=$satauuid" >> /boot/armbianEnv.txt
+			sed -e 's,rootfstype=.*,rootfstype='$FilesystemChoosen',g' -i /boot/armbianEnv.txt
+			grep -q '^rootfstype' /boot/armbianEnv.txt || echo "rootfstype=$FilesystemChoosen" >> /boot/armbianEnv.txt
 		else
 			sed -e 's,setenv rootdev.*,setenv rootdev '"$satauuid"',g' -i /boot/boot.cmd
 			sed -e 's,setenv rootdev.*,setenv rootdev '"$satauuid"',g' -i /boot/boot.ini
+			sed -e 's,setenv rootfstype.*,setenv rootfstype='$FilesystemChoosen',g' -i /boot/boot.cmd
+			sed -e 's,setenv rootfstype.*,setenv rootfstype='$FilesystemChoosen',g' -i /boot/boot.ini
 		fi
-		mkimage -C none -A arm -T script -d /boot/boot.cmd /boot/boot.scr >/dev/null 2>&1 || (echo "Error"; exit 0)
+		[[ -f /boot/boot.cmd ]] && mkimage -C none -A arm -T script -d /boot/boot.cmd /boot/boot.scr >/dev/null 2>&1 || (echo "Error"; exit 0)
 		mkdir -p /mnt/rootfs/media/mmc/boot
 		echo "$sduuid	/media/mmcboot	ext4    ${mountopts[ext4]}" >> /mnt/rootfs/etc/fstab
 		echo "/media/mmcboot/boot   				/boot		none	bind								0       0" >> /mnt/rootfs/etc/fstab
@@ -285,8 +291,8 @@ formatnand()
 	else
 		(echo y;) | sunxi-nand-part -f a10 /dev/nand 65536 'bootloader 65536' 'linux 0' >> $logfile 2>&1
 	fi
-	# The option -qF does not exist on mkfs.vfat
-	mkfs.vfat -F /dev/nand1 >> $logfile 2>&1
+
+	mkfs.vfat /dev/nand1 >> $logfile 2>&1
 	mkfs.ext4 -qF /dev/nand2 >> $logfile 2>&1
 }
 
@@ -423,8 +429,6 @@ main()
 		exit 1
 	fi
 
-	#recognize_root
-	root_partition=$(cat /proc/cmdline | sed -e 's/^.*root=//' -e 's/ .*$//')
 	IFS="'"
 	options=()
 	if [[ -n $emmccheck ]]; then
