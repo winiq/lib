@@ -78,10 +78,8 @@ cp -a /boot/amlogics905x_init.sh $DIR_INSTALL/boot
 
 rm $DIR_INSTALL/root/install.sh
 rm $DIR_INSTALL/root/fstab
-rm $DIR_INSTALL/usr/bin/ddbr_backup_3g
-rm $DIR_INSTALL/usr/bin/ddbr_backup_full
-rm $DIR_INSTALL/usr/bin/ddbr_restore_3g
-rm $DIR_INSTALL/usr/bin/ddbr_restore_full
+rm $DIR_INSTALL/usr/bin/ddbr_backup_nand
+rm $DIR_INSTALL/usr/bin/ddbr_restore_nand
 
 cd /
 sync
