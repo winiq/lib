@@ -48,7 +48,7 @@ if [[ $USE_GITHUB_UBOOT_MIRROR == yes ]]; then
 else
 	MAINLINE_UBOOT_SOURCE='git://git.denx.de/u-boot.git'
 fi
-MAINLINE_UBOOT_BRANCH='tag:v2017.01'
+MAINLINE_UBOOT_BRANCH='tag:v2017.03'
 MAINLINE_UBOOT_DIR='u-boot'
 
 # Let's set default data if not defined in board configuration above
@@ -136,7 +136,7 @@ PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-f
 	gtk2-engines gtk2-engines-murrine gtk2-engines-pixbuf libgtk2.0-bin gcj-jre-headless xfce4-screenshooter libgnome2-perl gksu bluetooth \
 	network-manager-gnome xfce4-notifyd gnome-keyring gcr libgck-1-0 libgcr-3-common p11-kit pasystray pavucontrol pulseaudio \
 	paman pavumeter pulseaudio-module-gconf pulseaudio-module-bluetooth blueman libpam-gnome-keyring libgl1-mesa-dri mpv \
-	libreoffice-writer libreoffice-style-tango libreoffice-gtk policykit-1"
+	libreoffice-writer libreoffice-style-tango libreoffice-gtk policykit-1 fbi"
 
 # Release specific packages
 case $RELEASE in
