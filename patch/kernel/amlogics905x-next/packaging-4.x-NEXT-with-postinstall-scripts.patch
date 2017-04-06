@@ -45,7 +45,7 @@ index 6c3b038..cc9b3c0 100755
 +fwpackagename=linux-firmware-image-next"$LOCALVERSION"
 +kernel_headers_packagename=linux-headers-next"$LOCALVERSION"
 +dtb_packagename=linux-dtb-next"$LOCALVERSION"
-+#libc_headers_packagename=linux-libc-dev-next"$LOCALVERSION"
++libc_headers_packagename=linux-libc-dev-next"$LOCALVERSION"
  dbg_packagename=$packagename-dbg
  debarch=
  forcearch=
@@ -73,9 +73,9 @@ index 6c3b038..cc9b3c0 100755
  	fi
  fi
  
-+if grep -q '^CONFIG_OF=y' $KCONFIG_CONFIG ; then
++if grep -q '^CONFIG_ARCH_MESON=y' $KCONFIG_CONFIG ; then
 +	mkdir -p "$tmpdir/boot/dtb-""$version"
-+	cp $objtree/arch/$SRCARCH/boot/dts/*.dtb $dtb_dir/boot/dtb-$version
++	cp $objtree/arch/$SRCARCH/boot/dts/amlogic/*.dtb $dtb_dir/boot/dtb-$version
 +fi
 +
  if [ "$ARCH" != "um" ]; then
