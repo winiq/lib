@@ -222,16 +222,15 @@ compile_kernel()
 	# hack for deb builder. To pack what's missing in headers pack.
 	cp $SRC/lib/patch/misc/headers-debian-byteshift.patch /tmp
 
-	export LOCALVERSION="-$LINUXFAMILY"
 
 	sed -i 's/EXTRAVERSION = .*/EXTRAVERSION =/' Makefile
 
 	if [[ $KERNEL_CONFIGURE != yes ]]; then
-		if [[ $BRANCH == default ]]; then
+#		if [[ $BRANCH == default ]]; then
 			make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" silentoldconfig
-		else
-			make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" olddefconfig
-		fi
+#		else
+#			make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" olddefconfig
+#		fi
 	else
 		make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" oldconfig
 		make $CTHREADS ARCH=$ARCHITECTURE CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" menuconfig
@@ -256,9 +255,11 @@ compile_kernel()
 		KERNEL_PACKING="bindeb-pkg"
 	fi
 
+	export LOCAL_VERSION="-$LINUXFAMILY"
+
 	# produce deb packages: image, headers, firmware, dtb
 	eval CCACHE_BASEDIR="$(pwd)" ${toolchain:+env PATH=$toolchain:$PATH} \
-		'make -j1 $KERNEL_PACKING KDEB_PKGVERSION=$REVISION LOCALVERSION="-"$LINUXFAMILY \
+		'make -j1 $KERNEL_PACKING KDEB_PKGVERSION=$REVISION LOCAL_VERSION="-$LINUXFAMILY" \
 		KBUILD_DEBARCH=$ARCH ARCH=$ARCHITECTURE DEBFULLNAME="$MAINTAINER" DEBEMAIL="$MAINTAINERMAIL" CROSS_COMPILE="$CCACHE $KERNEL_COMPILER" 2>&1' \
 		${PROGRESS_LOG_TO_FILE:+' | tee -a $DEST/debug/compilation.log'} \
 		${OUTPUT_DIALOG:+' | dialog --backtitle "$backtitle" --progressbox "Creating kernel packages..." $TTY_Y $TTY_X'} \
