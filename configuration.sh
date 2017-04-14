@@ -149,7 +149,7 @@ case $BUILD_DESKTOP_DE in
 	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP xfce4 xfce4-screenshooter xfce4-notifyd"
 	;;
 	mate)
-	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mate-desktop-environment-extras mate-media mate-screensaver mate-utils mate-power-manager"
+	PACKAGE_LIST_DESKTOP="$PACKAGE_LIST_DESKTOP mate-desktop-environment-extras mate-media mate-screensaver mate-utils mate-power-manager mate-applets"
 	;;
 esac
 
