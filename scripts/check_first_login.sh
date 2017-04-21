@@ -94,9 +94,12 @@ if [[ "$-" != "${-#*i}" ]]; then
 			echo '#exec icewm-session' >> /home/${RealUserName}/.xinitrc_example
 
 			tar -xf /usr/lib/libmali.tar.gz -C /usr
+			sync
+			sleep 2
+			ldconfig
 
 			sync
-			sleep 3
+			sleep 1
 			reboot
 		fi
 	fi
