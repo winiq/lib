@@ -58,3 +58,5 @@ echo 1 > /sys/devices/virtual/graphics/fbcon/cursor_blink
 #docker daemon
 
 #/etc/webmin/start &
+
+su -c 'hciattach /dev/ttyS1 any'
