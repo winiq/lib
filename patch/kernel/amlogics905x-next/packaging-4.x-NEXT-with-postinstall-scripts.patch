@@ -1,5 +1,5 @@
 --- ./scripts/package/builddeb
-+++ ./scripts/package/builddeb.orig
++++ ./scripts/package/builddeb
 @@ -29,6 +29,28 @@
  	# in case we are in a restrictive umask environment like 0077
  	chmod -R a+rX "$pdir"
@@ -96,33 +96,7 @@
  
  # Try to determine maintainer and email values
  if [ -n "$DEBEMAIL" ]; then
-@@ -332,16 +373,24 @@
- fi
- destdir=$kernel_headers_dir/usr/src/linux-headers-$version
- mkdir -p "$destdir"
-+######################## headers patch
-+ZACNI=$(pwd)
-+cd $destdir
-+patch -p1 < /tmp/headers-debian-byteshift.patch
-+cd $ZACNI
-+######################## headers patch
- (cd $srctree; tar -c -f - -T -) < "$objtree/debian/hdrsrcfiles" | (cd $destdir; tar -xf -)
- (cd $objtree; tar -c -f - -T -) < "$objtree/debian/hdrobjfiles" | (cd $destdir; tar -xf -)
- (cd $objtree; cp $KCONFIG_CONFIG $destdir/.config) # copy .config manually to be where it's expected to be
- ln -sf "/usr/src/linux-headers-$version" "$kernel_headers_dir/lib/modules/$version/build"
- rm -f "$objtree/debian/hdrsrcfiles" "$objtree/debian/hdrobjfiles"
- 
-+(cd "$destdir"; make M=scripts clean)
-+
- cat <<EOF >> debian/control
- 
- Package: $kernel_headers_packagename
--Provides: linux-headers, linux-headers-2.6
-+Provides: linux-headers
- Architecture: any
- Description: Linux kernel headers for $KERNELRELEASE on \${kernel:debarch}
-  This package provides kernel header files for $KERNELRELEASE on \${kernel:debarch}
-@@ -364,6 +413,16 @@
+@@ -360,6 +401,16 @@
  
  	create_package "$fwpackagename" "$fwdir"
  fi
