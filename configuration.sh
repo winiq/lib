@@ -56,6 +56,7 @@ MAINLINE_UBOOT_DIR='u-boot'
 ARCH=armhf
 KERNEL_IMAGE_TYPE=zImage
 SERIALCON=ttyS0
+SRC_LOADADDR=""
 
 # WARNING: This option is deprecated
 BOOTSIZE=0
