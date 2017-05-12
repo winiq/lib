@@ -17,7 +17,7 @@ MAINTAINERMAIL="igor.pecovnik@****l.com" # deb signature
 TZDATA=`cat /etc/timezone` # Timezone for target is taken from host or defined here.
 USEALLCORES=yes # Use all CPU cores for compiling
 EXIT_PATCHING_ERROR="" # exit patching if failed
-HOST="$BOARD" # set hostname to the board
+HOST="$(echo "$BOARD" | cut -f1 -d-)" # set hostname to the board
 CACHEDIR=$DEST/cache
 ROOTFSCACHE_VERSION=3
 
@@ -48,7 +48,7 @@ if [[ $USE_GITHUB_UBOOT_MIRROR == yes ]]; then
 else
 	MAINLINE_UBOOT_SOURCE='git://git.denx.de/u-boot.git'
 fi
-MAINLINE_UBOOT_BRANCH='tag:v2017.03'
+MAINLINE_UBOOT_BRANCH='tag:v2017.05'
 MAINLINE_UBOOT_DIR='u-boot'
 
 # Let's set default data if not defined in board configuration above
@@ -57,8 +57,8 @@ ARCH=armhf
 KERNEL_IMAGE_TYPE=zImage
 SERIALCON=ttyS0
 
-# WARNING: This option is deprecated
-BOOTSIZE=0
+# single ext4 partition is the default and preferred configuration
+#BOOTFS_TYPE=''
 
 # set unique mounting directory
 SDCARD="sdcard-${BRANCH}-${BOARD}-${RELEASE}-${BUILD_DESKTOP}"
@@ -93,35 +93,19 @@ case $ARCH in
 	;;
 esac
 
-# Here we want to use linux-sunxi-next and linux-sunxi-dev configs for sun*i
-# except for sun8i-dev which is separate from sunxi-dev
-[[ $LINUXFAMILY == sun*i && $BRANCH != default && ! ( $LINUXFAMILY == sun8i && $BRANCH == dev ) ]] && \
-	LINUXCONFIG="linux-sunxi-${BRANCH}"
-
 [[ -z $LINUXCONFIG ]] && LINUXCONFIG="linux-${LINUXFAMILY}-${BRANCH}"
 
+[[ -z $BOOTPATCHDIR ]] && BOOTPATCHDIR="u-boot-$LINUXFAMILY"
+[[ -z $KERNELPATCHDIR ]] && KERNELPATCHDIR="$LINUXFAMILY-$BRANCH"
+
 if [[ $RELEASE == xenial ]]; then DISTRIBUTION="Ubuntu"; else DISTRIBUTION="Debian"; fi
-
-# temporary hacks/overrides
-case $LINUXFAMILY in
-	sun*i)
-	# 2016.07+ compilation fails due to GCC bug
-	# works on Linaro 5.3.1, fails on Ubuntu 5.3.1
-	UBOOT_NEEDS_GCC='< 5.3'
-	;;
-
-	# also affects XU4 next branch
-	odroidxu4)
-	[[ $BRANCH == next ]] && UBOOT_NEEDS_GCC='< 5.3'
-	;;
-esac
 
 # Essential packages
 PACKAGE_LIST="bc bridge-utils build-essential cpufrequtils device-tree-compiler figlet fbset fping \
 	iw fake-hwclock wpasupplicant psmisc ntp parted rsync sudo curl linux-base dialog crda \
 	wireless-regdb ncurses-term python3-apt sysfsutils toilet u-boot-tools unattended-upgrades \
 	usbutils wireless-tools console-setup console-common unicode-data openssh-server initramfs-tools \
-	ca-certificates"
+	ca-certificates resolvconf"
 
 # development related packages. remove when they are not needed for building packages in chroot
 PACKAGE_LIST="$PACKAGE_LIST automake libwrap0-dev libssl-dev libusb-dev libusb-1.0-0-dev libnl-3-dev libnl-genl-3-dev"
@@ -130,7 +114,7 @@ PACKAGE_LIST="$PACKAGE_LIST automake libwrap0-dev libssl-dev libusb-dev libusb-1
 PACKAGE_LIST_ADDITIONAL="alsa-utils btrfs-tools dosfstools hddtemp iotop iozone3 stress sysbench screen ntfs-3g vim pciutils \
 	evtest htop pv lsof apt-transport-https libfuse2 libdigest-sha-perl libproc-processtable-perl aptitude dnsutils f3 haveged \
 	hdparm rfkill vlan sysstat bluez bluez-tools bash-completion hostapd git ethtool network-manager unzip ifenslave lirc \
-	libpam-systemd iperf3 software-properties-common libnss-myhostname f2fs-tools"
+	libpam-systemd iperf3 software-properties-common libnss-myhostname f2fs-tools avahi-autoipd iputils-arping"
 
 PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-fuse xfonts-base xinit nodm x11-xserver-utils xfce4 lxtask xterm mirage thunar-volman galculator \
 	gtk2-engines gtk2-engines-murrine gtk2-engines-pixbuf libgtk2.0-bin gcj-jre-headless xfce4-screenshooter libgnome2-perl gksu bluetooth \
@@ -177,6 +161,7 @@ PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_RELEASE $PACKAGE_LIST_ADDITIONAL"
 if [[ $ARCH == arm64 ]]; then
 	PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/iceweasel/iceweasel:armhf}"
 	PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/firefox/firefox:armhf}"
+	PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/thunderbird/thunderbird:armhf}"
 fi
 [[ $BUILD_DESKTOP == yes ]] && PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_DESKTOP"
 
@@ -191,6 +176,7 @@ Version: $(cd $SRC/lib; git rev-parse @)
 Build target:
 Board: $BOARD
 Branch: $BRANCH
+Desktop: $BUILD_DESKTOP
 
 Kernel configuration:
 Repository: $KERNELSOURCE
@@ -200,8 +186,13 @@ Config file: $LINUXCONFIG
 U-boot configuration:
 Repository: $BOOTSOURCE
 Branch: $BOOTBRANCH
+Config file: $BOOTCONFIG
+
+Partitioning configuration:
+Root partition type: $ROOTFS_TYPE
+Boot partition type: ${BOOTFS_TYPE:-(none)}
+User provided boot partition size: ${BOOTSIZE:-0}
 Offset: $OFFSET
-Size: $BOOTSIZE
 
 CPU configuration:
 $CPUMIN - $CPUMAX with $GOVERNOR
